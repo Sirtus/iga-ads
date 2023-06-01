@@ -233,6 +233,97 @@ function_value_3d eval_ders(double x, double y, double z, const U& u, const basi
     return {value, dx, dy, dz};
 }
 
+template <typename U>
+double eval(double x, double y, double z, double w, const U& u, const basis& bx, const basis& by,
+            const basis& bz, const basis& bw, eval_ctx& cx, eval_ctx& cy, eval_ctx& cz, eval_ctx& cw) {
+    int spanx = find_span(x, bx);
+    int spany = find_span(y, by);
+    int spanz = find_span(z, bz);
+    int spanw = find_span(w, bw);
+
+    double* bvx = cx.basis_vals();
+    double* bvy = cy.basis_vals();
+    double* bvz = cz.basis_vals();
+    double* bvw = cw.basis_vals();
+
+    eval_basis(spanx, x, bx, bvx, cx);
+    eval_basis(spany, y, by, bvy, cy);
+    eval_basis(spanz, z, bz, bvz, cz);
+    eval_basis(spanz, w, bw, bvw, cw);
+
+    int offsetx = spanx - bx.degree;
+    int offsety = spany - by.degree;
+    int offsetz = spanz - bz.degree;
+    int offsetw = spanw - bw.degree;
+
+    double value = 0;
+    for (int ix = 0; ix < bx.dofs_per_element(); ++ix) {
+        for (int iy = 0; iy < by.dofs_per_element(); ++iy) {
+            for (int iz = 0; iz < bz.dofs_per_element(); ++iz) {
+                for (int iw = 0; iw < bw.dofs_per_element(); ++iw) {
+                    int ixx = ix + offsetx;
+                    int iyy = iy + offsety;
+                    int izz = iz + offsetz;
+                    int iww = iw + offsetw;
+                    value += u(ixx, iyy, izz, iww) * bvx[ix] * bvy[iy] * bvz[iz] * bvw[iw];
+                }
+            }
+        }
+    }
+    return value;
+}
+
+template <typename U>
+function_value_4d eval_ders(double x, double y, double z, double w, const U& u, const basis& bx,
+                            const basis& by, const basis& bz, const basis& bw, eval_ders_ctx& cx, eval_ders_ctx& cy,
+                            eval_ders_ctx& cz, eval_ders_ctx& cw) {
+    int spanx = find_span(x, bx);
+    int spany = find_span(y, by);
+    int spanz = find_span(z, bz);
+    int spanw = find_span(z, bw);
+
+    double** bvx = cx.basis_vals();
+    double** bvy = cy.basis_vals();
+    double** bvz = cz.basis_vals();
+    double** bvw = cw.basis_vals();
+
+    eval_basis_with_derivatives(spanx, x, bx, bvx, 1, cx);
+    eval_basis_with_derivatives(spany, y, by, bvy, 1, cy);
+    eval_basis_with_derivatives(spanz, z, bz, bvz, 1, cz);
+    eval_basis_with_derivatives(spanw, w, bw, bvw, 1, cw);
+
+    int offsetx = spanx - bx.degree;
+    int offsety = spany - by.degree;
+    int offsetz = spanz - bz.degree;
+    int offsetw = spanw - bw.degree;
+
+    double value = 0;
+    double dx = 0;
+    double dy = 0;
+    double dz = 0;
+    double dw = 0;
+
+    for (int ix = 0; ix < bx.dofs_per_element(); ++ix) {
+        for (int iy = 0; iy < by.dofs_per_element(); ++iy) {
+            for (int iz = 0; iz < bz.dofs_per_element(); ++iz) {
+                for (int iw = 0; iw < bw.dofs_per_element(); ++iw) {
+                    int ixx = ix + offsetx;
+                    int iyy = iy + offsety;
+                    int izz = iz + offsetz;
+                    int iww = iw + offsetw;
+                    double uu = u(ixx, iyy, izz, iww);
+                    value += uu * bvx[0][ix] * bvy[0][iy] * bvz[0][iz] * bvw[0][iw];
+                    dx += uu * bvx[1][ix] * bvy[0][iy] * bvz[0][iz] * bvw[0][iw];
+                    dy += uu * bvx[0][ix] * bvy[1][iy] * bvz[0][iz] * bvw[0][iw];
+                    dz += uu * bvx[0][ix] * bvy[0][iy] * bvz[1][iz] * bvw[0][iw];
+                    dw += uu * bvx[0][ix] * bvy[0][iy] * bvz[0][iz] * bvw[1][iw];
+                }
+            }
+        }
+    }
+    return {value, dx, dy, dz, dw};
+}
+
 }  // namespace ads::bspline
 
 #endif  // ADS_BSPLINE_EVAL_HPP

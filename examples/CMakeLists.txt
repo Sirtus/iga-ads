@@ -28,6 +28,13 @@ add_example(heat_1d
   SRC
   heat/heat_1d.cpp)
 
+add_example(spacetime-heat MUMPS GALOIS
+  SRC
+    dg/heat.cpp
+  LIBS
+    bfg::lyra
+)
+
 add_example(heat_2d GALOIS
   SRC
   heat/heat_2d.cpp)

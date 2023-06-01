@@ -102,31 +102,6 @@ public:
     }
 };
 
-class poisson_type4 : private poisson_base<poisson_type4> {
-private:
-    using base = poisson_base;
-    friend base;
-
-public:
-    using point = ads::point4_t;
-    using base::u, base::f, base::g;
-
-    auto u(point X) const noexcept -> double {
-        const auto [x, y, z, w] = X;
-        return x * x + 0.5 * y * y + sin(pi * x) * sin(pi * y);
-    }
-
-    auto f(point X) const noexcept -> double {
-        const auto [x, y, z, w] = X;
-        return 1;
-    }
-
-    auto g(point X) const noexcept -> double {
-        const auto [x, y, z, w] = X;
-        return x * x + 0.5 * y * y;
-    }
-};
-
 /////////////
 
 void DG_poisson();
@@ -140,14 +115,14 @@ void DGiGRM_stokes_3D();
 
 int main() {
     try {
-        DG_poisson();
+        // DG_poisson();
         // DG_stokes();
         // DGiGRM_stokes();
 
         // poisson_3D();
         // DG_poisson_3D();
         // DG_stokes_3D();
-        // DGiGRM_stokes_3D();
+        DGiGRM_stokes_3D();
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         std::exit(1);
@@ -155,53 +130,50 @@ int main() {
 }
 
 void DG_poisson() {
-    auto elems = 2;
-    auto p = 1;
-    auto c = 0;
-    // auto eta = 1000000.0;  // good for Nitsche BC
-    auto eta = 10.0;
+    // auto elems = 128;
+    // auto p = 3;
+    // auto c = -1;
+    // // auto eta = 1000000.0;  // good for Nitsche BC
+    // auto eta = 10.0;
 
-    auto poisson = poisson_type4{};
+    // auto poisson = poisson_type1{};
 
-    auto xs = ads::evenly_spaced(0.0, 1.0, elems);
-    auto ys = ads::evenly_spaced(0.0, 1.0, elems);
-    auto zs = ads::evenly_spaced(0.0, 1.0, elems);
-    auto ws = ads::evenly_spaced(0.0, 1.0, elems);
+    // auto xs = ads::evenly_spaced(0.0, 1.0, elems);
+    // auto ys = ads::evenly_spaced(0.0, 1.0, elems);
+    // auto zs = ads::evenly_spaced(0.0, 1.0, elems);
 
-    auto bx = ads::make_bspline_basis(xs, p, c);
-    auto by = ads::make_bspline_basis(ys, p, c);
-    auto bz = ads::make_bspline_basis(zs, p, c);
-    auto bw = ads::make_bspline_basis(ws, p, c);
+    // auto bx = ads::make_bspline_basis(xs, p, c);
+    // auto by = ads::make_bspline_basis(ys, p, c);
+    // auto bz = ads::make_bspline_basis(zs, p, c);
 
+    // auto mesh = ads::regular_mesh3{xs, ys, zs};
+    // auto space = ads::space3{&mesh, bx, by, bz};
+    // auto quad = ads::quadrature3{&mesh, p + 1};
 
-    auto mesh = ads::regular_mesh4{xs, ys, zs, ws};
-    auto space = ads::space4{&mesh, bx, by, bz, bw};
-    auto quad = ads::quadrature4{&mesh, p + 1};
+    // auto n = space.dof_count();
 
-    auto n = space.dof_count();
+    // auto F = std::vector<double>(n);
+    // auto problem = ads::mumps::problem{F.data(), n};
+    // auto solver = ads::mumps::solver{};
 
-    auto F = std::vector<double>(n);
-    auto problem = ads::mumps::problem{F.data(), n};
-    auto solver = ads::mumps::solver{};
+    // auto out = [&problem](int row, int col, double val) {
+    //     if (val != 0) {
+    //         problem.add(row + 1, col + 1, val);
+    //     }
+    // };
+    // auto rhs = [&F](int J, double val) { F[J] += val; };
 
-    auto out = [&problem](int row, int col, double val) {
-        if (val != 0) {
-            problem.add(row + 1, col + 1, val);
-        }
-    };
-    auto rhs = [&F](int J, double val) { F[J] += val; };
+    // // assemble(space, quad, out, [](auto u, auto v, auto /*x*/) { return dot(grad(u), grad(v)); });
+    // assemble(space, quad, out, [](auto u, auto v, auto /*x*/) { return u.val * v.val; });
 
-    // assemble(space, quad, out, [](auto u, auto v, auto /*x*/) { return dot(grad(u), grad(v)); });
-    assemble(space, quad, out, [](auto u, auto v, auto /*x*/) { return u.val * v.val; });
+    // assemble_rhs(space, quad, rhs, [&poisson](auto v, auto xx) {  //
+    //     return v.val * f(x);
+    // });
 
-    assemble_rhs(space, quad, rhs, [&poisson](auto v, auto xx) {  //
-        return v.val * poisson.f(xx);
-    });
+    // solver.solve(problem);
 
-    solver.solve(problem);
-    auto u = ads::bspline_function4(&space, F.data());
-    save_to_file4("result.data", u); 
-    save_to_file4("error.data", [&](ads::point4_t x) {return u(x) - poisson.f(x);}); 
+    // auto u = ads::bspline_function3(&space, F.data());
+    // save_to_file("result.data", u);
 }
 
 template <typename Concrete>
@@ -1279,7 +1251,7 @@ public:
 };
 
 template <typename Vx, typename Vy, typename Vz, typename P>
-auto save_to_file3(const std::string& path, Vx&& vx, Vy&& vy, Vz&& vz, P&& pressure) -> void {
+auto save_to_file3(const std::string& path, Vx&& vx) -> void {
     constexpr auto res = 50;
     auto extent = fmt::format("0 {0} 0 {0} 0 {0}", res);
 
@@ -1288,19 +1260,7 @@ auto save_to_file3(const std::string& path, Vx&& vx, Vy&& vy, Vz&& vz, P&& press
     out.print("<VTKFile type=\"ImageData\" version=\"0.1\">\n");
     out.print("  <ImageData WholeExtent=\"{}\" origin=\"0 0 0\" spacing=\"1 1 1\">\n", extent);
     out.print("    <Piece Extent=\"{}\">\n", extent);
-    out.print("      <PointData Scalars=\"Pressure\" Vectors=\"Velocity\">\n", extent);
-
-    out.print("        <DataArray Name=\"Velocity\" type=\"Float32\" format=\"ascii\" "
-              "NumberOfComponents=\"3\">\n");
-    for (auto z : ads::evenly_spaced(0.0, 1.0, res)) {
-        for (auto y : ads::evenly_spaced(0.0, 1.0, res)) {
-            for (auto x : ads::evenly_spaced(0.0, 1.0, res)) {
-                const auto X = ads::point3_t{x, y, z};
-                out.print("{:.7} {:.7} {:.7}\n", vx(X), vy(X), vz(X));
-            }
-        }
-    }
-    out.print("        </DataArray>\n");
+    out.print("      <PointData Scalars=\"Pressure\" >\n", extent);
 
     out.print("        <DataArray Name=\"Pressure\" type=\"Float32\" format=\"ascii\" "
               "NumberOfComponents=\"1\">\n");
@@ -1308,7 +1268,7 @@ auto save_to_file3(const std::string& path, Vx&& vx, Vy&& vy, Vz&& vz, P&& press
         for (auto y : ads::evenly_spaced(0.0, 1.0, res)) {
             for (auto x : ads::evenly_spaced(0.0, 1.0, res)) {
                 const auto X = ads::point3_t{x, y, z};
-                out.print("{:.7}\n", pressure(X));
+                out.print("{:.7}\n", vx(X));
             }
         }
     }
@@ -1508,7 +1468,7 @@ void DG_stokes_3D() {
     fmt::print("Pressure jump seminorm = {:.6}\n", std::sqrt(vf));
 
     auto t_before_output = std::chrono::steady_clock::now();
-    save_to_file3("result.vti", sol_vx, sol_vy, sol_vz, sol_p);
+    // save_to_file3("result.vti", sol_vx, sol_vy, sol_vz, sol_p);
     auto t_after_output = std::chrono::steady_clock::now();
 
     auto as_ms = [](auto d) { return std::chrono::duration_cast<std::chrono::milliseconds>(d); };
@@ -1794,7 +1754,7 @@ void DGiGRM_stokes_3D() {
     fmt::print("res norm = {:.6}\n", res_norm);
 
     auto t_before_output = std::chrono::steady_clock::now();
-    save_to_file3("result.vti", sol_vx, sol_vy, sol_vz, [&](auto x) { return sol_p(x) - mean; });
+    // save_to_file3("result.vti", sol_vx, sol_vy, sol_vz, [&](auto x) { return sol_p(x) - mean; });
     auto t_after_output = std::chrono::steady_clock::now();
 
     auto as_ms = [](auto d) { return std::chrono::duration_cast<std::chrono::milliseconds>(d); };

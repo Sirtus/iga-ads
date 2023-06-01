@@ -149,6 +149,95 @@ boost::iterator_range<iter_product3<Iter, Out>> product_range(boost::iterator_ra
     return boost::make_iterator_range(it_begin, it_end);
 }
 
+template <typename Iter, typename Out = impl::iter_tuple<Iter, Iter, Iter, Iter>>
+class iter_product4 : public boost::iterator_facade<     //
+                          iter_product4<Iter, Out>,      // self type
+                          Out,                           // element type
+                          boost::forward_traversal_tag,  // iterator category
+                          Out                            // reference type
+                          > {
+private:
+    using iter_range = boost::iterator_range<Iter>;
+
+    Iter iter1, iter2, iter3, iter4;
+    iter_range range2, range3, range4;
+
+public:
+    iter_product4(Iter iter1, Iter iter2, Iter iter3, Iter iter4, iter_range range2, iter_range range3, iter_range range4)
+    : iter1{iter1}
+    , iter2{iter2}
+    , iter3{iter3}
+    , iter4{iter4}
+    , range2{range2}
+    , range3{range3}
+    , range4{range4} { }
+
+private:
+    friend class boost::iterator_core_access;
+
+    void increment() {
+        using boost::begin;
+        using boost::end;
+
+        ++iter4;
+        if (iter4 == end(range4)) {
+            iter4 = begin(range4);
+            increment_level3();
+        }
+    }
+
+    void increment_level3() {
+        using boost::begin;
+        using boost::end;
+
+        ++iter3;
+        if (iter3 == end(range3)) {
+            iter3 = begin(range3);
+            increment_level2();
+        }
+    }
+
+    void increment_level2() {
+        using boost::begin;
+        using boost::end;
+
+        ++iter2;
+        if (iter2 == end(range2)) {
+            iter2 = begin(range2);
+            ++iter1;
+        }
+    }
+
+    Out dereference() const { return Out{*iter1, *iter2, *iter3, *iter4}; }
+
+    bool equal(const iter_product4<Iter, Out>& other) const {
+        return iter1 == other.iter1 && iter2 == other.iter2 && iter3 == other.iter3
+            && iter4 == other.iter4 && range2 == other.range2 && range3 == other.range3
+            && range4 == other.range4;
+    }
+};
+
+template <typename Iter, typename Out = impl::iter_tuple<Iter, Iter, Iter, Iter>>
+iter_product4<Iter, Out> product_iter(Iter iter1, Iter iter2, Iter iter3, Iter iter4,
+                                      boost::iterator_range<Iter> range2,
+                                      boost::iterator_range<Iter> range3,
+                                      boost::iterator_range<Iter> range4) {
+    return {iter1, iter2, iter3, iter4, range2, range3, range4};
+}
+
+template <typename Out, typename Iter>
+boost::iterator_range<iter_product4<Iter, Out>> product_range(boost::iterator_range<Iter> rx,
+                                                              boost::iterator_range<Iter> ry,
+                                                              boost::iterator_range<Iter> rz,
+                                                              boost::iterator_range<Iter> rw) {
+    using boost::begin;
+    using boost::end;
+
+    auto it_begin = product_iter<Iter, Out>(begin(rx), begin(ry), begin(rz), begin(rw), ry, rz, rw);
+    auto it_end = product_iter<Iter, Out>(end(rx), begin(ry), begin(rz), begin(rw), ry, rz, rw);
+    return boost::make_iterator_range(it_begin, it_end);
+}
+
 }  // namespace ads::util
 
 #endif  // ADS_UTIL_ITER_PRODUCT_HPP
