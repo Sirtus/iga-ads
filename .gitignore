@@ -11,9 +11,13 @@
 /.cproject
 /.project
 /.settings/
+/.vscode
 
 # Local CMake presets
 /CMakeUserPresets.json
 
 # python
 __pycache__/
+
+# dependencies
+/deps
