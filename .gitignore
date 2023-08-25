@@ -12,6 +12,7 @@
 /.project
 /.settings/
 /.vscode
+/.cache
 
 # Local CMake presets
 /CMakeUserPresets.json
