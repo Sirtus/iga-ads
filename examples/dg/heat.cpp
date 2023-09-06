@@ -44,38 +44,28 @@ auto save_heat_to_file(std::string const& path, double time, U const& u) -> void
     out.print("</VTKFile>\n");
 }
 
+
 template <typename U>
 auto save_heat_to_file4D(std::string const& path, double time, U const& u) -> void {
     constexpr auto res = 50;
     auto extent = fmt::format("0 {0} 0 {0} 0 {0} 0 {0}", res);
     auto spacing = fmt::format("{0} {0} {0} {0}", 1.0 / res);
 
-    auto out = fmt::output_file(path);
-    out.print("<?xml version=\"1.0\"?>\n");
-    out.print("<VTKFile type=\"ImageData\" version=\"0.1\">\n");
-    out.print("  <ImageData WholeExtent=\"{}\" Origin=\"0 0 0 0\" Spacing=\"{}\">\n", extent,
-              spacing);
-    out.print("    <Piece Extent=\"{}\">\n", extent);
-    out.print("      <PointData Scalars=\"u\">\n");
+    auto u_at_fixed_t = [&](double t) {
+      return [&](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return u({x, y, z, t});
+      };
+    };
 
-    out.print("        <DataArray Name=\"u\" type=\"Float32\" format=\"ascii\" "
-              "NumberOfComponents=\"1\">\n");
+
+    int i = 0;
     for (auto t : ads::evenly_spaced(0.0, time, res)) {
-        for (auto z: ads::evenly_spaced(0.0, 1.0, res)) {
-            for (auto y : ads::evenly_spaced(0.0, 1.0, res)) {
-                for (auto x : ads::evenly_spaced(0.0, 1.0, res)) {
-                    const auto X = ads::point4_t{x, y, z, t};
-                    out.print("{:.7}\n", u(X));
-                }
-            }
-        }
+        save_heat_to_file(fmt::format("output_{}.vti", i), time, u_at_fixed_t(t)); 
+        ++i;
     }
-    out.print("        </DataArray>\n");
-    out.print("      </PointData>\n");
-    out.print("    </Piece>\n");
-    out.print("  </ImageData>\n");
-    out.print("</VTKFile>\n");
 }
+
 
 constexpr double pi = M_PI;
 
@@ -208,7 +198,7 @@ auto galerkin_main(int /*argc*/, char* /*argv*/[]) -> void {
 
 
 auto galerkin_main4D(int /*argc*/, char* /*argv*/[]) -> void {
-    auto const elems = 32;
+    auto const elems = 4;
     auto const p = 2;
     auto const c = 1;
     auto const T = 1;
@@ -552,5 +542,6 @@ auto stabilized_main(int argc, char* argv[]) -> void {
 
 auto main(int argc, char* argv[]) -> int {
     galerkin_main4D(argc, argv);
+    //galerkin_main(argc, argv);
     // stabilized_main(argc, argv);
 }
