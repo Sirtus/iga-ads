@@ -249,7 +249,7 @@ double eval(double x, double y, double z, double w, const U& u, const basis& bx,
     eval_basis(spanx, x, bx, bvx, cx);
     eval_basis(spany, y, by, bvy, cy);
     eval_basis(spanz, z, bz, bvz, cz);
-    eval_basis(spanz, w, bw, bvw, cw);
+    eval_basis(spanw, w, bw, bvw, cw);
 
     int offsetx = spanx - bx.degree;
     int offsety = spany - by.degree;

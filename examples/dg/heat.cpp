@@ -52,7 +52,7 @@ auto save_heat_to_file4D(std::string const& path, double time, U const& u) -> vo
     auto spacing = fmt::format("{0} {0} {0} {0}", 1.0 / res);
 
     auto u_at_fixed_t = [&](double t) {
-      return [&](ads::point3_t p) {
+      return [&, t](ads::point3_t p) {
         auto const [x, y, z] = p;
         return u({x, y, z, t});
       };
@@ -203,7 +203,7 @@ auto galerkin_main4D(int /*argc*/, char* /*argv*/[]) -> void {
     auto const c = 1;
     auto const T = 1;
     auto const eps = 5 * 1.0e-3;
-    auto const s = 0 * 1.0;
+    auto const s = 1 * 1.0;
     auto const beta_x = s * 0.0;
     auto const beta_y = s * 1.0;
     auto const beta_z = s * 1.0;
@@ -241,7 +241,7 @@ auto galerkin_main4D(int /*argc*/, char* /*argv*/[]) -> void {
     auto rhs = [&F](int row, double val) { F[row] += val; };
 
     fmt::print("Assembling matrix\n");
-    assemble(U, quad, M, [](auto u, auto v, auto /*x*/) { return u.dz * v.val; });
+    assemble(U, quad, M, [](auto u, auto v, auto /*x*/) { return u.dw * v.val; });
     assemble(Vx, quad, M, [](auto sx, auto tx, auto /*x*/) { return sx.val * tx.val; });
     assemble(Vy, quad, M, [](auto sy, auto ty, auto /*x*/) { return sy.val * ty.val; });
     assemble(Vz, quad, M, [](auto sz, auto tz, auto /*x*/) { return sz.val * tz.val; });
@@ -253,7 +253,7 @@ auto galerkin_main4D(int /*argc*/, char* /*argv*/[]) -> void {
              [=](auto u, auto tz, auto /*x*/) { return (eps * u.dz - beta_z * u.val) * tz.val; }); // operator L
     assemble(Vx, U, quad, M, [](auto sx, auto v, auto /*x*/) { return sx.dx * v.val; });
     assemble(Vy, U, quad, M, [](auto sy, auto v, auto /*x*/) { return sy.dy * v.val; });
-    assemble(Vz, U, quad, M, [](auto sz, auto v, auto /*x*/) { return sz.dy * v.val; });
+    assemble(Vz, U, quad, M, [](auto sz, auto v, auto /*x*/) { return sz.dz * v.val; });
 
     fmt::print("Assembling RHS\n");
     assemble_rhs(U, quad, rhs, [](auto v, auto /*x*/) { return 0 * v.val; });
