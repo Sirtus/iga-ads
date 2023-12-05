@@ -106,6 +106,8 @@ public:
     explicit interval_mesh(partition points) noexcept
     : points_{std::move(points)} { }
 
+    auto points() const noexcept -> partition const& { return points_; }
+
     auto elements() const noexcept -> element_range { return range(0, element_count()); }
 
     auto element_count() const noexcept -> int { return narrow_cast<int>(points_.size()) - 1; }
@@ -181,6 +183,10 @@ public:
         return util::product_range<element_index>(rx, ry);
     }
 
+    auto mesh_x() const noexcept -> interval_mesh const& { return mesh_x_; }
+
+    auto mesh_y() const noexcept -> interval_mesh const& { return mesh_y_; }
+
     struct element_data {
         interval span_x;
         interval span_y;
@@ -192,6 +198,8 @@ public:
         orientation direction;
         facet_type type;
         point normal;
+        std::optional<element_data> element1;
+        std::optional<element_data> element2;
     };
 
     using facet_data = edge_data;
@@ -258,13 +266,27 @@ public:
             const auto [y, type, ny] = mesh_y_.facet(iy);
             const auto span = mesh_x_.subinterval(ix);
             const auto normal = point{0, ny};
-            return {span, y, dir, type, normal};
+            const auto elem1 = maybe_element_({ix, iy - 1});
+            const auto elem2 = maybe_element_({ix, iy});
+            return {span, y, dir, type, normal, elem1, elem2};
         } else {
             assert(dir == orientation::vertical && "Invalid edge orientation");
             const auto [x, type, nx] = mesh_x_.facet(ix);
             const auto span = mesh_y_.subinterval(iy);
             const auto normal = point{nx, 0};
-            return {span, x, dir, type, normal};
+            const auto elem1 = maybe_element_({ix - 1, iy});
+            const auto elem2 = maybe_element_({ix, iy});
+            return {span, x, dir, type, normal, elem1, elem2};
+        }
+    }
+
+private:
+    auto maybe_element_(element_index e) const noexcept -> std::optional<element_data> {
+        const auto [ix, iy] = e;
+        if (0 <= ix && ix < mesh_x_.element_count() && 0 <= iy && iy < mesh_y_.element_count()) {
+            return element(e);
+        } else {
+            return std::nullopt;
         }
     }
 };
@@ -683,7 +705,7 @@ public:
 
 class quadrature {
 private:
-    regular_mesh* mesh_;
+    regular_mesh const* mesh_;
     int point_count_;
 
 public:
@@ -693,7 +715,7 @@ public:
     using point_set = tensor_quadrature_points;
     using edge_point_set = edge_quadrature_points;
 
-    quadrature(regular_mesh* mesh, int point_count)
+    quadrature(regular_mesh const* mesh, int point_count)
     : mesh_{mesh}
     , point_count_{point_count} {
         assert(point_count_ >= 2 && "Too few quadrature points");
@@ -783,7 +805,7 @@ inline auto eval_tensor_basis(const ValsX& vals_x, const ValsY& vals_y) noexcept
 
 class space {
 private:
-    regular_mesh* mesh_;
+    regular_mesh const* mesh_;
     bspline_space space_x_;
     bspline_space space_y_;
     global_dof dof_offset_;
@@ -799,7 +821,7 @@ public:
     using dof_iterator = index_types::index_iterator;
     using dof_range = index_types::index_range;
 
-    space(regular_mesh* mesh, bspline::basis bx, bspline::basis by,
+    space(regular_mesh const* mesh, bspline::basis bx, bspline::basis by,
           global_dof dof_offset = 0) noexcept
     : mesh_{mesh}
     , space_x_{std::move(bx)}
@@ -1000,6 +1022,50 @@ private:
                 return {avg, jump};
             }
         }
+
+        auto normal_derivative(dof_index dof, point_index q, int der, point normal) const noexcept
+            -> facet_value<double> {
+            const auto [ix, iy] = space_->index_on_facet(dof, facet_);
+            const auto [nx, ny] = normal;
+
+            if (facet_.dir == orientation::horizontal) {
+                auto const vx = vals_interval_(q, ix, 0);
+                auto const dx = vals_interval_(q, ix, der);
+                auto const vy_avg = vals_point_.average(iy, 0);
+                auto const dy_avg = vals_point_.average(iy, der);
+                auto const vy_jump = vals_point_.jump(iy, 0, ny);
+                auto const dy_jump = vals_point_.jump(iy, der, ny);
+
+                auto const dnx_avg = dx * vy_avg;
+                auto const dnx_jump = dx * vy_jump;
+
+                auto const dny_avg = vx * dy_avg;
+                auto const dny_jump = vx * dy_jump;
+
+                auto const avg = point{dnx_avg, dny_avg};
+                auto const jump = point{dnx_jump, dny_jump};
+
+                return {dot(normal, avg), dot(normal, jump)};
+            } else {
+                auto const vy = vals_interval_(q, iy, 0);
+                auto const dy = vals_interval_(q, iy, der);
+                auto const vx_avg = vals_point_.average(ix, 0);
+                auto const dx_avg = vals_point_.average(ix, der);
+                auto const vx_jump = vals_point_.jump(ix, 0, nx);
+                auto const dx_jump = vals_point_.jump(ix, der, nx);
+
+                auto const dnx_avg = dx_avg * vy;
+                auto const dnx_jump = dx_jump * vy;
+
+                auto const dny_avg = vx_avg * dy;
+                auto const dny_jump = vx_jump * dy;
+
+                auto const avg = point{dnx_avg, dny_avg};
+                auto const jump = point{dnx_jump, dny_jump};
+
+                return {dot(normal, avg), dot(normal, jump)};
+            }
+        }
     };
 
     auto index_on_element(dof_index dof, element_index e) const noexcept -> dof_index {
@@ -1042,6 +1108,8 @@ private:
     const double* coefficients_;
     mutable bspline::eval_ctx ctx_x_;
     mutable bspline::eval_ctx ctx_y_;
+    mutable bspline::eval_ders_ctx ctx_ders_x_;
+    mutable bspline::eval_ders_ctx ctx_ders_y_;
     mutable std::mutex ctx_lock_;
 
 public:
@@ -1051,7 +1119,9 @@ public:
     : space_{space}
     , coefficients_{coefficients}
     , ctx_x_{space->space_x().degree()}
-    , ctx_y_{space->space_y().degree()} { }
+    , ctx_y_{space->space_y().degree()}
+    , ctx_ders_x_{space->space_x().degree(), 1}
+    , ctx_ders_y_{space->space_y().degree(), 1} { }
 
     auto operator()(point p) const noexcept -> double { return eval_(p); }
 
@@ -1074,6 +1144,12 @@ public:
         }
     }
 
+    auto with_grad(point p) const noexcept -> value_type { return eval_with_grad_(p); }
+
+    auto with_grad() const noexcept {
+        return [this](point p) { return with_grad(p); };
+    }
+
 private:
     auto eval_(point p) const noexcept -> double {
         const auto [x, y] = p;
@@ -1089,6 +1165,21 @@ private:
         std::scoped_lock guard{ctx_lock_};
         return bspline::eval(x, y, coeffs, bx, by, ctx_x_, ctx_y_);
     }
+
+    auto eval_with_grad_(point p) const noexcept -> value_type {
+        const auto [x, y] = p;
+
+        auto coeffs = [this](int i, int j) {
+            const auto idx = space_->global_index({i, j});
+            return coefficients_[idx];
+        };
+
+        const auto& bx = space_->space_x().basis();
+        const auto& by = space_->space_y().basis();
+
+        std::scoped_lock guard{ctx_lock_};
+        return bspline::eval_ders(x, y, coeffs, bx, by, ctx_ders_x_, ctx_ders_y_);
+    }
 };
 
 auto evenly_spaced(double a, double b, int elems) -> partition {
@@ -1099,6 +1190,10 @@ auto evenly_spaced(double a, double b, int elems) -> partition {
         xs[i] = lerp(i, elems, a, b);
     }
     return xs;
+}
+
+auto evenly_spaced(interval range, int elems) -> partition {
+    return evenly_spaced(range.left, range.right, elems);
 }
 
 auto make_bspline_basis(const partition& points, int p, int c) -> bspline::basis {
@@ -1822,7 +1917,7 @@ public:
 
 class quadrature3 {
 private:
-    regular_mesh3* mesh_;
+    regular_mesh3 const* mesh_;
     int point_count_;
 
 public:
@@ -1832,7 +1927,7 @@ public:
     using point_set = tensor_quadrature_points3;
     using face_point_set = face_quadrature_points;
 
-    quadrature3(regular_mesh3* mesh, int point_count) noexcept
+    quadrature3(regular_mesh3 const* mesh, int point_count) noexcept
     : mesh_{mesh}
     , point_count_{point_count} {
         assert(point_count_ >= 2 && "Too few quadrature points");
@@ -1916,7 +2011,7 @@ inline auto eval_tensor_basis(const ValsX& vals_x, const ValsY& vals_y,
 
 class space3 {
 private:
-    regular_mesh3* mesh_;
+    regular_mesh3 const* mesh_;
     bspline_space space_x_;
     bspline_space space_y_;
     bspline_space space_z_;
@@ -1933,7 +2028,7 @@ public:
     using dof_iterator = index_types3::index_iterator;
     using dof_range = index_types3::index_range;
 
-    space3(regular_mesh3* mesh, bspline::basis bx, bspline::basis by, bspline::basis bz,
+    space3(regular_mesh3 const* mesh, bspline::basis bx, bspline::basis by, bspline::basis bz,
            global_dof dof_offset = 0) noexcept
     : mesh_{mesh}
     , space_x_{std::move(bx)}
