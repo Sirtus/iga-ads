@@ -2580,7 +2580,7 @@ public:
         const auto nx = space_x_.dof_count(ex);
         const auto ny = space_y_.dof_count(ey);
         const auto nz = space_z_.dof_count(ez);
-        const auto nw = space_z_.dof_count(ew);
+        const auto nw = space_w_.dof_count(ew);
 
         return nx * ny * nz * nw;
     }
