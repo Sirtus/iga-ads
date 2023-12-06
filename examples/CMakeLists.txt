@@ -30,7 +30,14 @@ add_example(heat_1d
 
 add_example(spacetime-heat MUMPS GALOIS
   SRC
-    dg/heat.cpp
+  dg/heat.cpp
+  LIBS
+  bfg::lyra
+)
+
+add_example(spacetime-maxwell MUMPS GALOIS
+  SRC
+  dg/maxwell4D.cpp
   LIBS
     bfg::lyra
 )
