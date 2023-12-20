@@ -116,3 +116,22 @@ cmake \
 
 cmake --build Catch2/build
 cmake --install Catch2/build
+
+# Install Eigen
+EIGEN_VER=3.4.0
+curl -sL https://gitlab.com/libeigen/eigen/-/archive/${EIGEN_VER}/eigen-${EIGEN_VER}.tar.gz -o eigen.tar.gz
+tar xzf eigen.tar.gz
+mv eigen-${EIGEN_VER} Eigen
+
+mkdir -p Eigen/build
+
+cmake \
+  -S Eigen \
+  -B Eigen/build \
+  -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
+  -D CMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+  -D CMAKE_PREFIX_PATH="${INSTALL_DIR}" \
+  -D BUILD_TESTING=OFF
+
+cmake --build Eigen/build
+cmake --install Eigen/build

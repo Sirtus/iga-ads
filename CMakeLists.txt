@@ -13,6 +13,7 @@ include(cmake/Setup.cmake)
 # --------------------------------------------------------------------
 
 option(ADS_USE_MUMPS "Use MUMPS solver" OFF)
+option(ADS_USE_EIGEN "Use Eigen solver" OFF)
 option(ADS_USE_GALOIS "Use Galois framework" OFF)
 option(ADS_BUILD_PROBLEMS "Build example problems" ON)
 option(ADS_BUILD_TOOLS "Build supporting applications" ON)
@@ -86,6 +87,11 @@ endif()
 if (ADS_USE_GALOIS)
   find_package(Galois 6.0 REQUIRED)
   target_link_libraries(ads-objects PUBLIC Galois::shmem)
+endif()
+
+if (ADS_USE_EIGEN)
+  find_package(Eigen3 REQUIRED)
+  target_link_libraries(ads-objects PUBLIC Eigen3::Eigen)
 endif()
 
 # --------------------------------------------------------------------
