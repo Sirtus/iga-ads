@@ -9,6 +9,7 @@
 
 #include "ads/experimental/all.hpp"
 #include "ads/solver/mumps.hpp"
+#include "ads/solver/eigen.hpp"
 
 namespace ads {
 
@@ -42,6 +43,14 @@ public:
     }
 
     auto mumpsify(ads::mumps::problem& problem) const -> void {
+        for (auto const& [idx, val] : storage_) {
+            if (val != 0) {
+                problem.add(idx.i + 1, idx.j + 1, val);
+            }
+        }
+    }
+
+    auto mumpsify(ads::eigen::problem& problem) const -> void {
         for (auto const& [idx, val] : storage_) {
             if (val != 0) {
                 problem.add(idx.i + 1, idx.j + 1, val);

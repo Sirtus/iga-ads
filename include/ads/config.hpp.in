@@ -10,6 +10,9 @@
 // Defined if ADS was configured to use MUMPS
 #cmakedefine ADS_USE_MUMPS
 
+// Defined if ADS was configured to use MUMPS
+#cmakedefine ADS_USE_EIGEN
+
 #include <string_view>
 
 namespace ads {

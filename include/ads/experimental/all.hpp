@@ -29,6 +29,7 @@
 #include "ads/lin/tensor.hpp"
 #include "ads/quad/gauss.hpp"
 #include "ads/solver/mumps.hpp"
+#include "ads/solver/eigen.hpp"
 #include "ads/util.hpp"
 #include "ads/util/function_value.hpp"
 #include "ads/util/iter/product.hpp"

@@ -36,6 +36,12 @@ add_example(heat_3d
   SRC
   heat/heat_3d.cpp)
 
+add_example(spacetime-heat MUMPS GALOIS EIGEN                                        
+  SRC                                                                           
+  dg/heat.cpp                                                                   
+  LIBS                                                                          
+  bfg::lyra)
+
 add_example(scalability GALOIS
   SRC
   scalability/main.cpp)
