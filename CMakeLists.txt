@@ -21,6 +21,8 @@ option(ADS_BUILD_TESTING "Build tests (even as a subproject)" OFF)
 
 option(ADS_ENABLE_COVERAGE "Code coverage" OFF)
 set(ADS_USE_SANITIZERS "" CACHE STRING "List of sanitizers to use (semicolon separated)")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 
 # --------------------------------------------------------------------
 # Other settings

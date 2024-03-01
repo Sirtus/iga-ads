@@ -29,7 +29,6 @@
 #include "ads/lin/tensor.hpp"
 #include "ads/quad/gauss.hpp"
 #include "ads/solver/mumps.hpp"
-#include "ads/solver/eigen.hpp"
 #include "ads/util.hpp"
 #include "ads/util/function_value.hpp"
 #include "ads/util/iter/product.hpp"
@@ -52,11 +51,8 @@ auto empty_range() noexcept -> simple_index_range {
 
 struct index_types {
     using index = std::tuple<int, int>;
-    using index3 = std::tuple<int, int, int>;
     using index_iterator = util::iter_product2<simple_index_iterator, index>;
-    using index_iterator3 = util::iter_product3<simple_index_iterator, index3>;
     using index_range = boost::iterator_range<index_iterator>;
-    using index_range3 = boost::iterator_range<index_iterator3>;
 };
 
 struct interval {
@@ -106,8 +102,6 @@ public:
 
     explicit interval_mesh(partition points) noexcept
     : points_{std::move(points)} { }
-
-    auto points() const noexcept -> partition const& { return points_; }
 
     auto elements() const noexcept -> element_range { return range(0, element_count()); }
 
@@ -184,10 +178,6 @@ public:
         return util::product_range<element_index>(rx, ry);
     }
 
-    auto mesh_x() const noexcept -> interval_mesh const& { return mesh_x_; }
-
-    auto mesh_y() const noexcept -> interval_mesh const& { return mesh_y_; }
-
     struct element_data {
         interval span_x;
         interval span_y;
@@ -199,8 +189,6 @@ public:
         orientation direction;
         facet_type type;
         point normal;
-        std::optional<element_data> element1;
-        std::optional<element_data> element2;
     };
 
     using facet_data = edge_data;
@@ -267,27 +255,13 @@ public:
             const auto [y, type, ny] = mesh_y_.facet(iy);
             const auto span = mesh_x_.subinterval(ix);
             const auto normal = point{0, ny};
-            const auto elem1 = maybe_element_({ix, iy - 1});
-            const auto elem2 = maybe_element_({ix, iy});
-            return {span, y, dir, type, normal, elem1, elem2};
+            return {span, y, dir, type, normal};
         } else {
             assert(dir == orientation::vertical && "Invalid edge orientation");
             const auto [x, type, nx] = mesh_x_.facet(ix);
             const auto span = mesh_y_.subinterval(iy);
             const auto normal = point{nx, 0};
-            const auto elem1 = maybe_element_({ix - 1, iy});
-            const auto elem2 = maybe_element_({ix, iy});
-            return {span, x, dir, type, normal, elem1, elem2};
-        }
-    }
-
-private:
-    auto maybe_element_(element_index e) const noexcept -> std::optional<element_data> {
-        const auto [ix, iy] = e;
-        if (0 <= ix && ix < mesh_x_.element_count() && 0 <= iy && iy < mesh_y_.element_count()) {
-            return element(e);
-        } else {
-            return std::nullopt;
+            return {span, x, dir, type, normal};
         }
     }
 };
@@ -706,7 +680,7 @@ public:
 
 class quadrature {
 private:
-    regular_mesh const* mesh_;
+    regular_mesh* mesh_;
     int point_count_;
 
 public:
@@ -716,7 +690,7 @@ public:
     using point_set = tensor_quadrature_points;
     using edge_point_set = edge_quadrature_points;
 
-    quadrature(regular_mesh const* mesh, int point_count)
+    quadrature(regular_mesh* mesh, int point_count)
     : mesh_{mesh}
     , point_count_{point_count} {
         assert(point_count_ >= 2 && "Too few quadrature points");
@@ -806,7 +780,7 @@ inline auto eval_tensor_basis(const ValsX& vals_x, const ValsY& vals_y) noexcept
 
 class space {
 private:
-    regular_mesh const* mesh_;
+    regular_mesh* mesh_;
     bspline_space space_x_;
     bspline_space space_y_;
     global_dof dof_offset_;
@@ -822,7 +796,7 @@ public:
     using dof_iterator = index_types::index_iterator;
     using dof_range = index_types::index_range;
 
-    space(regular_mesh const* mesh, bspline::basis bx, bspline::basis by,
+    space(regular_mesh* mesh, bspline::basis bx, bspline::basis by,
           global_dof dof_offset = 0) noexcept
     : mesh_{mesh}
     , space_x_{std::move(bx)}
@@ -1023,50 +997,6 @@ private:
                 return {avg, jump};
             }
         }
-
-        auto normal_derivative(dof_index dof, point_index q, int der, point normal) const noexcept
-            -> facet_value<double> {
-            const auto [ix, iy] = space_->index_on_facet(dof, facet_);
-            const auto [nx, ny] = normal;
-
-            if (facet_.dir == orientation::horizontal) {
-                auto const vx = vals_interval_(q, ix, 0);
-                auto const dx = vals_interval_(q, ix, der);
-                auto const vy_avg = vals_point_.average(iy, 0);
-                auto const dy_avg = vals_point_.average(iy, der);
-                auto const vy_jump = vals_point_.jump(iy, 0, ny);
-                auto const dy_jump = vals_point_.jump(iy, der, ny);
-
-                auto const dnx_avg = dx * vy_avg;
-                auto const dnx_jump = dx * vy_jump;
-
-                auto const dny_avg = vx * dy_avg;
-                auto const dny_jump = vx * dy_jump;
-
-                auto const avg = point{dnx_avg, dny_avg};
-                auto const jump = point{dnx_jump, dny_jump};
-
-                return {dot(normal, avg), dot(normal, jump)};
-            } else {
-                auto const vy = vals_interval_(q, iy, 0);
-                auto const dy = vals_interval_(q, iy, der);
-                auto const vx_avg = vals_point_.average(ix, 0);
-                auto const dx_avg = vals_point_.average(ix, der);
-                auto const vx_jump = vals_point_.jump(ix, 0, nx);
-                auto const dx_jump = vals_point_.jump(ix, der, nx);
-
-                auto const dnx_avg = dx_avg * vy;
-                auto const dnx_jump = dx_jump * vy;
-
-                auto const dny_avg = vx_avg * dy;
-                auto const dny_jump = vx_jump * dy;
-
-                auto const avg = point{dnx_avg, dny_avg};
-                auto const jump = point{dnx_jump, dny_jump};
-
-                return {dot(normal, avg), dot(normal, jump)};
-            }
-        }
     };
 
     auto index_on_element(dof_index dof, element_index e) const noexcept -> dof_index {
@@ -1109,8 +1039,6 @@ private:
     const double* coefficients_;
     mutable bspline::eval_ctx ctx_x_;
     mutable bspline::eval_ctx ctx_y_;
-    mutable bspline::eval_ders_ctx ctx_ders_x_;
-    mutable bspline::eval_ders_ctx ctx_ders_y_;
     mutable std::mutex ctx_lock_;
 
 public:
@@ -1120,9 +1048,7 @@ public:
     : space_{space}
     , coefficients_{coefficients}
     , ctx_x_{space->space_x().degree()}
-    , ctx_y_{space->space_y().degree()}
-    , ctx_ders_x_{space->space_x().degree(), 1}
-    , ctx_ders_y_{space->space_y().degree(), 1} { }
+    , ctx_y_{space->space_y().degree()} { }
 
     auto operator()(point p) const noexcept -> double { return eval_(p); }
 
@@ -1145,12 +1071,6 @@ public:
         }
     }
 
-    auto with_grad(point p) const noexcept -> value_type { return eval_with_grad_(p); }
-
-    auto with_grad() const noexcept {
-        return [this](point p) { return with_grad(p); };
-    }
-
 private:
     auto eval_(point p) const noexcept -> double {
         const auto [x, y] = p;
@@ -1166,21 +1086,6 @@ private:
         std::scoped_lock guard{ctx_lock_};
         return bspline::eval(x, y, coeffs, bx, by, ctx_x_, ctx_y_);
     }
-
-    auto eval_with_grad_(point p) const noexcept -> value_type {
-        const auto [x, y] = p;
-
-        auto coeffs = [this](int i, int j) {
-            const auto idx = space_->global_index({i, j});
-            return coefficients_[idx];
-        };
-
-        const auto& bx = space_->space_x().basis();
-        const auto& by = space_->space_y().basis();
-
-        std::scoped_lock guard{ctx_lock_};
-        return bspline::eval_ders(x, y, coeffs, bx, by, ctx_ders_x_, ctx_ders_y_);
-    }
 };
 
 auto evenly_spaced(double a, double b, int elems) -> partition {
@@ -1191,10 +1096,6 @@ auto evenly_spaced(double a, double b, int elems) -> partition {
         xs[i] = lerp(i, elems, a, b);
     }
     return xs;
-}
-
-auto evenly_spaced(interval range, int elems) -> partition {
-    return evenly_spaced(range.left, range.right, elems);
 }
 
 auto make_bspline_basis(const partition& points, int p, int c) -> bspline::basis {
@@ -1224,186 +1125,6 @@ enum class orientation3 {
     dir_x,
     dir_y,
     dir_z,
-};
-
-class regular_mesh3 {
-private:
-    interval_mesh mesh_x_;
-    interval_mesh mesh_y_;
-    interval_mesh mesh_z_;
-
-public:
-    using point = std::tuple<double, double, double>;
-    using element_index = index_types3::index;
-    using element_iterator = index_types3::index_iterator;
-    using element_range = index_types3::index_range;
-
-    struct face_index {
-        simple_index ix;
-        simple_index iy;
-        simple_index iz;
-        orientation3 dir;
-    };
-
-    using facet_index = face_index;
-
-    regular_mesh3(partition xs, partition ys, partition zs) noexcept
-    : mesh_x_{std::move(xs)}
-    , mesh_y_{std::move(ys)}
-    , mesh_z_{std::move(zs)} { }
-
-    auto elements() const noexcept -> element_range {
-        const auto rx = mesh_x_.elements();
-        const auto ry = mesh_y_.elements();
-        const auto rz = mesh_z_.elements();
-        return util::product_range<element_index>(rx, ry, rz);
-    }
-
-    struct element_data {
-        interval span_x;
-        interval span_y;
-        interval span_z;
-    };
-
-    struct face_data {
-        // dir x: 1 - y, 2 - z
-        // dir y: 1 - x, 2 - z
-        // dir z: 1 - x, 2 - y
-        interval span1;
-        interval span2;
-        double position;
-        double diameter;
-        orientation3 direction;
-        facet_type type;
-        point normal;
-    };
-
-    using facet_data = face_data;
-
-    auto element(element_index e) const noexcept -> element_data {
-        const auto [ix, iy, iz] = e;
-        const auto sx = mesh_x_.subinterval(ix);
-        const auto sy = mesh_y_.subinterval(iy);
-        const auto sz = mesh_z_.subinterval(iz);
-        return {sx, sy, sz};
-    }
-
-    auto facets() const noexcept -> std::vector<facet_index> {
-        auto indices = std::vector<facet_index>{};
-
-        for (auto ix : mesh_x_.facets()) {
-            for (auto iy : mesh_y_.elements()) {
-                for (auto iz : mesh_z_.elements()) {
-                    indices.push_back({ix, iy, iz, orientation3::dir_x});
-                }
-            }
-        }
-        for (auto ix : mesh_x_.elements()) {
-            for (auto iy : mesh_y_.facets()) {
-                for (auto iz : mesh_z_.elements()) {
-                    indices.push_back({ix, iy, iz, orientation3::dir_y});
-                }
-            }
-        }
-        for (auto ix : mesh_x_.elements()) {
-            for (auto iy : mesh_y_.elements()) {
-                for (auto iz : mesh_z_.facets()) {
-                    indices.push_back({ix, iy, iz, orientation3::dir_z});
-                }
-            }
-        }
-        return indices;
-    }
-
-    auto boundary_facets() const noexcept -> std::vector<facet_index> {
-        auto indices = std::vector<facet_index>{};
-
-        for (auto ix : mesh_x_.boundary_facets()) {
-            for (auto iy : mesh_y_.elements()) {
-                for (auto iz : mesh_z_.elements()) {
-                    indices.push_back({ix, iy, iz, orientation3::dir_x});
-                }
-            }
-        }
-        for (auto ix : mesh_x_.elements()) {
-            for (auto iy : mesh_y_.boundary_facets()) {
-                for (auto iz : mesh_z_.elements()) {
-                    indices.push_back({ix, iy, iz, orientation3::dir_y});
-                }
-            }
-        }
-        for (auto ix : mesh_x_.elements()) {
-            for (auto iy : mesh_y_.elements()) {
-                for (auto iz : mesh_z_.boundary_facets()) {
-                    indices.push_back({ix, iy, iz, orientation3::dir_z});
-                }
-            }
-        }
-        return indices;
-    }
-
-    auto interior_facets() const noexcept -> std::vector<facet_index> {
-        auto indices = std::vector<facet_index>{};
-
-        for (auto ix : mesh_x_.interior_facets()) {
-            for (auto iy : mesh_y_.elements()) {
-                for (auto iz : mesh_z_.elements()) {
-                    indices.push_back({ix, iy, iz, orientation3::dir_x});
-                }
-            }
-        }
-        for (auto ix : mesh_x_.elements()) {
-            for (auto iy : mesh_y_.interior_facets()) {
-                for (auto iz : mesh_z_.elements()) {
-                    indices.push_back({ix, iy, iz, orientation3::dir_y});
-                }
-            }
-        }
-        for (auto ix : mesh_x_.elements()) {
-            for (auto iy : mesh_y_.elements()) {
-                for (auto iz : mesh_z_.interior_facets()) {
-                    indices.push_back({ix, iy, iz, orientation3::dir_z});
-                }
-            }
-        }
-        return indices;
-    }
-
-    auto facet(face_index f) const noexcept -> face_data {
-        const auto [ix, iy, iz, dir] = f;
-
-        if (dir == orientation3::dir_x) {
-            // 1 - y, 2 - z
-            const auto [x, type, nx] = mesh_x_.facet(ix);
-            const auto span_y = mesh_y_.subinterval(iy);
-            const auto span_z = mesh_z_.subinterval(iz);
-            const auto normal = point{nx, 0, 0};
-            const auto diam = diameter(span_y, span_z);
-            return {span_y, span_z, x, diam, dir, type, normal};
-        } else if (dir == orientation3::dir_y) {
-            // 1 - x, 2 - z
-            const auto span_x = mesh_x_.subinterval(ix);
-            const auto [y, type, ny] = mesh_y_.facet(iy);
-            const auto span_z = mesh_z_.subinterval(iz);
-            const auto normal = point{0, ny, 0};
-            const auto diam = diameter(span_x, span_z);
-            return {span_x, span_z, y, diam, dir, type, normal};
-        } else {
-            assert(dir == orientation3::dir_z && "Invalid face orientation");
-            // 1 - x, 2 - y
-            const auto span_x = mesh_x_.subinterval(ix);
-            const auto span_y = mesh_y_.subinterval(iy);
-            const auto [z, type, nz] = mesh_z_.facet(iz);
-            const auto normal = point{0, 0, nz};
-            const auto diam = diameter(span_x, span_y);
-            return {span_x, span_y, z, diam, dir, type, normal};
-        }
-    }
-
-private:
-    auto diameter(interval a, interval b) const noexcept -> double {
-        return std::hypot(length(a), length(b));
-    }
 };
 
 struct index_types4 {
@@ -1446,7 +1167,7 @@ public:
     regular_mesh4(partition xs, partition ys, partition zs, partition ws) noexcept
     : mesh_x_{std::move(xs)}
     , mesh_y_{std::move(ys)}
-    , mesh_z_{std::move(zs)}
+    , mesh_z_{std::move(ys)}
     , mesh_w_{std::move(ws)} { }
 
     auto elements() const noexcept -> element_range {
@@ -1782,72 +1503,6 @@ public:
     }
 };
 
-class tensor_quadrature_points4 {
-private:
-    interval_quadrature_points ptx_;
-    interval_quadrature_points pty_;
-    interval_quadrature_points ptz_;
-    interval_quadrature_points ptw_;
-
-public:
-    using point = std::tuple<double, double, double, double>;
-    using point_index = index_types4::index;
-    using point_iterator = index_types4::index_iterator;
-    using point_range = index_types4::index_range;
-
-    tensor_quadrature_points4(interval_quadrature_points ptx, interval_quadrature_points pty,
-                              interval_quadrature_points ptz, interval_quadrature_points ptw) noexcept
-    : ptx_{std::move(ptx)}
-    , pty_{std::move(pty)}
-    , ptz_{std::move(ptz)}
-    , ptw_{std::move(ptw)} { }
-
-    auto xs() const noexcept -> const std::vector<double>& { return ptx_.points(); }
-
-    auto ys() const noexcept -> const std::vector<double>& { return pty_.points(); }
-
-    auto zs() const noexcept -> const std::vector<double>& { return ptz_.points(); }
-
-    auto ws() const noexcept -> const std::vector<double>& { return ptw_.points(); }
-
-    auto indices() const noexcept -> point_range {
-        const auto rx = ptx_.indices();
-        const auto ry = pty_.indices();
-        const auto rz = ptz_.indices();
-        const auto rw = ptw_.indices();
-        return util::product_range<point_index>(rx, ry, rz, rw);
-    }
-
-    auto coords(point_index q) const noexcept -> point {
-        const auto [ix, iy, iz, iw] = q;
-        const auto x = ptx_.coords(ix);
-        const auto y = pty_.coords(iy);
-        const auto z = ptz_.coords(iz);
-        const auto w = ptz_.coords(iw);
-        return {x, y, z, w};
-    }
-
-    auto weight(point_index q) const noexcept -> double {
-        const auto [ix, iy, iz, iw] = q;
-        const auto wx = ptx_.weight(ix);
-        const auto wy = pty_.weight(iy);
-        const auto wz = ptz_.weight(iz);
-        const auto ww = ptz_.weight(iw);
-        return wx * wy * wz * ww;
-    }
-
-    struct point_data {
-        point x;
-        double weight;
-    };
-
-    auto data(point_index q) const noexcept -> point_data {
-        const auto x = coords(q);
-        const auto w = weight(q);
-        return {x, w};
-    }
-};
-
 class face_quadrature_points {
 private:
     // dir x: 1 - y, 2 - z
@@ -1918,7 +1573,7 @@ public:
 
 class quadrature3 {
 private:
-    regular_mesh3 const* mesh_;
+    regular_mesh3* mesh_;
     int point_count_;
 
 public:
@@ -1928,7 +1583,7 @@ public:
     using point_set = tensor_quadrature_points3;
     using face_point_set = face_quadrature_points;
 
-    quadrature3(regular_mesh3 const* mesh, int point_count) noexcept
+    quadrature3(regular_mesh3* mesh, int point_count) noexcept
     : mesh_{mesh}
     , point_count_{point_count} {
         assert(point_count_ >= 2 && "Too few quadrature points");
@@ -1975,7 +1630,6 @@ private:
 };
 
 using value_type3 = ads::function_value_3d;
-using value_type4 = ads::function_value_4d;
 
 auto grad_dot(const value_type3& u, const value_type3& v) noexcept -> double {
     return u.dx * v.dx + u.dy * v.dy + u.dz * v.dz;
@@ -2012,7 +1666,7 @@ inline auto eval_tensor_basis(const ValsX& vals_x, const ValsY& vals_y,
 
 class space3 {
 private:
-    regular_mesh3 const* mesh_;
+    regular_mesh3* mesh_;
     bspline_space space_x_;
     bspline_space space_y_;
     bspline_space space_z_;
@@ -2029,7 +1683,7 @@ public:
     using dof_iterator = index_types3::index_iterator;
     using dof_range = index_types3::index_range;
 
-    space3(regular_mesh3 const* mesh, bspline::basis bx, bspline::basis by, bspline::basis bz,
+    space3(regular_mesh3* mesh, bspline::basis bx, bspline::basis by, bspline::basis bz,
            global_dof dof_offset = 0) noexcept
     : mesh_{mesh}
     , space_x_{std::move(bx)}
@@ -2366,618 +2020,6 @@ private:
     }
 };
 
-template <typename ValsX, typename ValsY, typename ValsZ, typename ValsW>
-inline auto eval_tensor_basis(const ValsX& vals_x, const ValsY& vals_y,
-                              const ValsZ& vals_z, const ValsW& vals_w) noexcept -> value_type4 {
-    const auto Bx = vals_x(0);
-    const auto dBx = vals_x(1);
-    const auto By = vals_y(0);
-    const auto dBy = vals_y(1);
-    const auto Bz = vals_z(0);
-    const auto dBz = vals_z(1);
-    const auto Bw = vals_w(0);
-    const auto dBw = vals_w(1);
-
-    const auto v = Bx * By * Bz * Bw;
-    const auto dx = dBx * By * Bz * Bw;
-    const auto dy = Bx * dBy * Bz * Bw;
-    const auto dz = Bx * By * dBz * Bw;
-    const auto dw = Bx * By * Bz * dBw;
-
-    return {v, dx, dy, dz, dw};
-}
-
-using point4_t = regular_mesh4::point;
-
-class face_quadrature_points4 {
-private:
-    // dir x: 1 - y, 2 - z
-    // dir y: 1 - x, 2 - z
-    // dir z: 1 - x, 2 - y
-    interval_quadrature_points points1_;
-    interval_quadrature_points points2_;
-    interval_quadrature_points points3_;
-    double position_;
-    orientation4 direction_;
-
-public:
-    using point = std::tuple<double, double, double, double>;
-    using point_index = index_types::index3;
-    using point_iterator = index_types::index_iterator3;
-    using point_range = index_types::index_range3;
-
-    face_quadrature_points4(interval_quadrature_points points1, interval_quadrature_points points2,
-                           interval_quadrature_points points3,
-                           double position, orientation4 direction) noexcept
-    : points1_{std::move(points1)}
-    , points2_{std::move(points2)}
-    , points3_{std::move(points3)}
-    , position_{position}
-    , direction_{direction} { }
-
-    auto points1() const noexcept -> const std::vector<double>& { return points1_.points(); }
-
-    auto points2() const noexcept -> const std::vector<double>& { return points2_.points(); }
-
-    auto points3() const noexcept -> const std::vector<double>& { return points3_.points(); }
-
-    auto position() const noexcept -> double { return position_; }
-
-    auto indices() const noexcept -> point_range {
-        const auto r1 = points1_.indices();
-        const auto r2 = points2_.indices();
-        const auto r3 = points3_.indices();
-        return util::product_range<point_index>(r1, r2, r3);
-    }
-
-    auto coords(point_index q) const noexcept -> point {
-        const auto [q1, q2, q3] = q;
-        const auto s1 = points1_.coords(q1);
-        const auto s2 = points2_.coords(q2);
-        const auto s3 = points3_.coords(q3);
-
-        if (direction_ == orientation4::dir_x) {
-            return {position_, s1, s2, s3};
-        } else if (direction_ == orientation4::dir_y) {
-            return {s1, position_, s2, s3};
-        } else if (direction_ == orientation4::dir_z) {
-            return {s1, s2, position_, s3};
-        } else {
-            return {s1, s2, s3, position_};
-        }
-    }
-
-    auto weight(point_index q) const noexcept -> double {
-        const auto [q1, q2, q3] = q;
-        const auto w1 = points1_.weight(q1);
-        const auto w2 = points2_.weight(q2);
-        const auto w3 = points3_.weight(q3);
-        return w1 * w2 * w3;
-    }
-
-    struct point_data {
-        point x;
-        double weight;
-    };
-
-    auto data(point_index q) const noexcept -> point_data {
-        const auto x = coords(q);
-        const auto w = weight(q);
-        return {x, w};
-    }
-};
-
-class quadrature4 {
-private:
-    regular_mesh4* mesh_;
-    int point_count_;
-
-public:
-    using point = regular_mesh4::point;
-    using element_index = regular_mesh4::element_index;
-    using facet_index = regular_mesh4::facet_index;
-    using point_set = tensor_quadrature_points4;
-    using face_point_set = face_quadrature_points4;
-
-    quadrature4(regular_mesh4* mesh, int point_count) noexcept
-    : mesh_{mesh}
-    , point_count_{point_count} {
-        assert(point_count_ >= 2 && "Too few quadrature points");
-    }
-
-    auto coordinates(element_index e) const -> point_set {
-        const auto element = mesh_->element(e);
-
-        auto ptx = data_for_interval(element.span_x);
-        auto pty = data_for_interval(element.span_y);
-        auto ptz = data_for_interval(element.span_z);
-        auto ptw = data_for_interval(element.span_w);
-
-        return {std::move(ptx), std::move(pty), std::move(ptz), std::move(ptw)};
-    }
-
-    auto coordinates(facet_index f) const -> face_point_set {
-        const auto face = mesh_->facet(f);
-        auto pts1 = data_for_interval(face.span1);
-        auto pts2 = data_for_interval(face.span2);
-        auto pts3 = data_for_interval(face.span3);
-
-        return {std::move(pts1), std::move(pts2), std::move(pts3), face.position, face.direction};
-    }
-
-private:
-    // TODO: remove duplication
-    auto data_for_interval(interval target) const -> interval_quadrature_points {
-        const auto size = length(target);
-        const auto scale = size / 2;  // Gauss quadrature is defined for [-1, 1]
-        const auto* weights = quad::gauss::Ws[point_count_];
-
-        return {transform_points(target), weights, scale};
-    }
-
-    auto transform_points(interval target) const -> std::vector<double> {
-        auto points = std::vector<double>(point_count_);
-
-        for (int i = 0; i < point_count_; ++i) {
-            const auto t = quad::gauss::Xs[point_count_][i];  // [-1, 1]
-            const auto s = (t + 1) / 2;                       // [ 0, 1]
-            points[i] = lerp(s, target);
-        }
-        return points;
-    }
-};
-
-class space4 {
-private:
-    regular_mesh4* mesh_;
-    bspline_space space_x_;
-    bspline_space space_y_;
-    bspline_space space_z_;
-    bspline_space space_w_;
-    global_dof dof_offset_;
-
-    class evaluator;
-    class face_evaluator;
-
-public:
-    using point = regular_mesh4::point;
-    using element_index = regular_mesh4::element_index;
-    using facet_index = regular_mesh4::facet_index;
-    using dof_index = index_types4::index;
-    using dof_iterator = index_types4::index_iterator;
-    using dof_range = index_types4::index_range;
-
-    space4(regular_mesh4* mesh, bspline::basis bx, bspline::basis by, bspline::basis bz, bspline::basis bw,
-           global_dof dof_offset = 0) noexcept
-    : mesh_{mesh}
-    , space_x_{std::move(bx)}
-    , space_y_{std::move(by)}
-    , space_z_{std::move(bz)}
-    , space_w_{std::move(bw)}
-    , dof_offset_{dof_offset} { }
-
-    auto mesh() const noexcept -> const regular_mesh4& { return *mesh_; }
-
-    auto space_x() const noexcept -> const bspline_space& { return space_x_; }
-
-    auto space_y() const noexcept -> const bspline_space& { return space_y_; }
-
-    auto space_z() const noexcept -> const bspline_space& { return space_z_; }
-
-    auto space_w() const noexcept -> const bspline_space& { return space_z_; }
-
-
-    auto dof_count() const noexcept -> int {
-        const auto nx = space_x_.dof_count();
-        const auto ny = space_y_.dof_count();
-        const auto nz = space_z_.dof_count();
-        const auto nw = space_w_.dof_count();
-
-        return nx * ny * nz * nw;
-    }
-
-    auto dof_count(element_index e) const noexcept -> int {
-        const auto [ex, ey, ez, ew] = e;
-        const auto nx = space_x_.dof_count(ex);
-        const auto ny = space_y_.dof_count(ey);
-        const auto nz = space_z_.dof_count(ez);
-        const auto nw = space_w_.dof_count(ew);
-
-        return nx * ny * nz * nw;
-    }
-
-    auto facet_dof_count(facet_index f) const noexcept -> int {
-        const auto [fx, fy, fz, fw, dir] = f;
-
-        if (dir == orientation4::dir_x) {
-            const auto ndofs_x = space_x_.facet_dof_count(fx);
-            const auto ndofs_y = space_y_.dofs_per_element();
-            const auto ndofs_z = space_z_.dofs_per_element();
-            const auto ndofs_w = space_w_.dofs_per_element();
-            return ndofs_x * ndofs_y * ndofs_z * ndofs_w;
-        } else if (dir == orientation4::dir_y) {
-            const auto ndofs_x = space_x_.dofs_per_element();
-            const auto ndofs_y = space_y_.facet_dof_count(fy);
-            const auto ndofs_z = space_z_.dofs_per_element();
-            const auto ndofs_w = space_w_.dofs_per_element();
-            return ndofs_x * ndofs_y * ndofs_z * ndofs_w;
-        } else if (dir == orientation4::dir_z) {
-            const auto ndofs_x = space_x_.dofs_per_element();
-            const auto ndofs_y = space_y_.dofs_per_element();
-            const auto ndofs_z = space_z_.facet_dof_count(fz);
-            const auto ndofs_w = space_w_.dofs_per_element();
-            return ndofs_x * ndofs_y * ndofs_z * ndofs_w;
-        } else {
-            assert(dir == orientation4::dir_w && "Invalid face orientation");
-            const auto ndofs_x = space_x_.dofs_per_element();
-            const auto ndofs_y = space_y_.dofs_per_element();
-            const auto ndofs_z = space_z_.dofs_per_element();
-            const auto ndofs_w = space_w_.facet_dof_count(fw);
-            return ndofs_x * ndofs_y * ndofs_z * ndofs_w;
-        }
-    }
-
-    auto dofs() const noexcept -> dof_range {
-        const auto dofs_x = space_x_.dofs();
-        const auto dofs_y = space_y_.dofs();
-        const auto dofs_z = space_z_.dofs();
-        const auto dofs_w = space_w_.dofs();
-
-        return util::product_range<dof_index>(dofs_x, dofs_y, dofs_z, dofs_w);
-    }
-
-    auto dofs(element_index e) const noexcept -> dof_range {
-        const auto [ex, ey, ez, ew] = e;
-        const auto dofs_x = space_x_.dofs(ex);
-        const auto dofs_y = space_y_.dofs(ey);
-        const auto dofs_z = space_z_.dofs(ez);
-        const auto dofs_w = space_w_.dofs(ew);
-
-        return util::product_range<dof_index>(dofs_x, dofs_y, dofs_z, dofs_w);
-    }
-
-    auto dofs_on_facet(facet_index f) const noexcept -> dof_range {
-        const auto [ix, iy, iz, iw, dir] = f;
-
-        if (dir == orientation4::dir_x) {
-            const auto dofs_x = space_x_.dofs_on_facet(ix);
-            const auto dofs_y = space_y_.dofs(iy);
-            const auto dofs_z = space_z_.dofs(iz);
-            const auto dofs_w = space_w_.dofs(iw);
-            return util::product_range<dof_index>(dofs_x, dofs_y, dofs_z, dofs_w);
-        } else if (dir == orientation4::dir_y) {
-            const auto dofs_x = space_x_.dofs(ix);
-            const auto dofs_y = space_y_.dofs_on_facet(iy);
-            const auto dofs_z = space_z_.dofs(iz);
-            const auto dofs_w = space_w_.dofs(iw);
-            return util::product_range<dof_index>(dofs_x, dofs_y, dofs_z, dofs_w);
-        } else if (dir == orientation4::dir_z) {
-            const auto dofs_x = space_x_.dofs(ix);
-            const auto dofs_y = space_y_.dofs(iy);
-            const auto dofs_z = space_z_.dofs_on_facet(iz);
-            const auto dofs_w = space_w_.dofs(iw);
-            return util::product_range<dof_index>(dofs_x, dofs_y, dofs_z, dofs_w);
-        } else {
-            assert(dir == orientation4::dir_w && "Invalid face orientation");
-            const auto dofs_x = space_x_.dofs(ix);
-            const auto dofs_y = space_y_.dofs(iy);
-            const auto dofs_z = space_z_.dofs(iz);
-            const auto dofs_w = space_w_.dofs_on_facet(iw);
-            return util::product_range<dof_index>(dofs_x, dofs_y, dofs_z, dofs_w);
-        }
-    }
-
-    auto local_index(dof_index dof, element_index e) const noexcept -> local_dof {
-        const auto idx = index_on_element(dof, e);
-
-        const auto ndofs_x = space_x_.dofs_per_element();
-        const auto ndofs_y = space_y_.dofs_per_element();
-        const auto ndofs_z = space_z_.dofs_per_element();
-        const auto ndofs_w = space_w_.dofs_per_element();
-
-        return linearized(idx, {ndofs_x, ndofs_y, ndofs_z, ndofs_w});
-    }
-
-    auto facet_local_index(dof_index dof, facet_index f) const noexcept -> local_dof {
-        const auto idx = index_on_facet(dof, f);
-
-        const auto [fx, fy, fz, fw, dir] = f;
-
-        if (dir == orientation4::dir_x) {
-            const auto ndofs_x = space_x_.facet_dof_count(fx);
-            const auto ndofs_y = space_y_.dofs_per_element();
-            const auto ndofs_z = space_z_.dofs_per_element();
-            const auto ndofs_w = space_w_.dofs_per_element();
-            return linearized(idx, {ndofs_x, ndofs_y, ndofs_z, ndofs_w});
-        } else if (dir == orientation4::dir_y) {
-            const auto ndofs_x = space_x_.dofs_per_element();
-            const auto ndofs_y = space_y_.facet_dof_count(fy);
-            const auto ndofs_z = space_z_.dofs_per_element();
-            const auto ndofs_w = space_w_.dofs_per_element();
-            return linearized(idx, {ndofs_x, ndofs_y, ndofs_z, ndofs_w});
-        } else if (dir == orientation4::dir_z) {
-            const auto ndofs_x = space_x_.dofs_per_element();
-            const auto ndofs_y = space_y_.dofs_per_element();
-            const auto ndofs_z = space_z_.facet_dof_count(fz);
-            const auto ndofs_w = space_w_.dofs_per_element();
-            return linearized(idx, {ndofs_x, ndofs_y, ndofs_z, ndofs_w});
-        } else {
-            assert(dir == orientation4::dir_w && "Invalid face orientation");
-            const auto ndofs_x = space_x_.dofs_per_element();
-            const auto ndofs_y = space_y_.dofs_per_element();
-            const auto ndofs_z = space_z_.dofs_per_element();
-            const auto ndofs_w = space_w_.facet_dof_count(fw);
-            return linearized(idx, {ndofs_x, ndofs_y, ndofs_z, ndofs_w});
-        }
-    }
-
-    auto global_index(dof_index dof) const noexcept -> global_dof {
-        const auto ndofs_x = space_x_.dof_count();
-        const auto ndofs_y = space_y_.dof_count();
-        const auto ndofs_z = space_z_.dof_count();
-        const auto ndofs_w = space_w_.dof_count();
-
-        return dof_offset_ + linearized(dof, {ndofs_x, ndofs_y, ndofs_z, ndofs_w});
-    }
-
-    auto dof_evaluator(element_index e, const tensor_quadrature_points4& points, int ders) const
-        -> evaluator {
-        auto data_x = evaluate_basis(points.xs(), space_x_, ders);
-        auto data_y = evaluate_basis(points.ys(), space_y_, ders);
-        auto data_z = evaluate_basis(points.zs(), space_z_, ders);
-        auto data_w = evaluate_basis(points.ws(), space_w_, ders);
-
-        return evaluator{this, e, std::move(data_x), std::move(data_y), std::move(data_z), std::move(data_w)};
-    }
-
-    auto dof_evaluator(facet_index f, const face_quadrature_points4& points, int ders) const
-        -> face_evaluator {
-        const auto [fx, fy, fz, fw, dir] = f;
-
-        if (dir == orientation4::dir_x) {
-            // 1 - y, 2 - z
-            auto data_x = evaluate_basis(fx, space_x_, ders);
-            auto data_y = evaluate_basis(points.points1(), space_y_, ders);
-            auto data_z = evaluate_basis(points.points2(), space_z_, ders);
-            auto data_w = evaluate_basis(points.points3(), space_w_, ders);
-            return face_evaluator{
-                this, f, std::move(data_y), std::move(data_z), std::move(data_w), std::move(data_x),
-            };
-        } else if (dir == orientation4::dir_y) {
-            // 1 - x, 2 - z
-            auto data_x = evaluate_basis(points.points1(), space_x_, ders);
-            auto data_y = evaluate_basis(fy, space_y_, ders);
-            auto data_z = evaluate_basis(points.points2(), space_z_, ders);
-            auto data_w = evaluate_basis(points.points3(), space_w_, ders);
-            return face_evaluator{
-                this, f, std::move(data_x), std::move(data_z), std::move(data_w), std::move(data_y),
-            };
-        } else if (dir == orientation4::dir_z) {
-            // 1 - x, 2 - z
-            auto data_x = evaluate_basis(points.points1(), space_x_, ders);
-            auto data_y = evaluate_basis(points.points2(), space_y_, ders);
-            auto data_z = evaluate_basis(fz, space_z_, ders);
-            auto data_w = evaluate_basis(points.points3(), space_w_, ders);
-            return face_evaluator{
-                this, f, std::move(data_x), std::move(data_y), std::move(data_w), std::move(data_z),
-            };
-        } else {
-            assert(dir == orientation4::dir_w && "Invalid face orientation");
-            // 1 - x, 2 - y
-            auto data_x = evaluate_basis(points.points1(), space_x_, ders);
-            auto data_y = evaluate_basis(points.points2(), space_y_, ders);
-            auto data_z = evaluate_basis(points.points2(), space_z_, ders);
-            auto data_w = evaluate_basis(fw, space_w_, ders);
-            return face_evaluator{
-                this, f, std::move(data_x), std::move(data_y), std::move(data_z), std::move(data_w),
-            };
-        }
-    }
-
-private:
-    class evaluator {
-    private:
-        const space4* space_;
-        element_index element_;
-        bspline_basis_values vals_x_;
-        bspline_basis_values vals_y_;
-        bspline_basis_values vals_z_;
-        bspline_basis_values vals_w_;
-
-    public:
-        using point_index = tensor_quadrature_points4::point_index;
-
-        evaluator(const space4* space, element_index element, bspline_basis_values vals_x,
-                  bspline_basis_values vals_y, bspline_basis_values vals_z, bspline_basis_values vals_w) noexcept
-        : space_{space}
-        , element_{element}
-        , vals_x_{std::move(vals_x)}
-        , vals_y_{std::move(vals_y)}
-        , vals_z_{std::move(vals_z)}
-        , vals_w_{std::move(vals_w)} { }
-
-        auto operator()(dof_index dof, point_index q) const noexcept -> value_type4 {
-            const auto [qx, qy, qz, qw] = q;
-            const auto [ix, iy, iz, iw] = space_->index_on_element(dof, element_);
-
-            return eval_tensor_basis(
-                [&, qx = qx, ix = ix](int der) { return vals_x_(qx, ix, der); },
-                [&, qy = qy, iy = iy](int der) { return vals_y_(qy, iy, der); },
-                [&, qz = qz, iz = iz](int der) { return vals_z_(qz, iz, der); },
-                [&, qw = qw, iw = iw](int der) { return vals_w_(qw, iw, der); });
-        }
-    };
-
-    class face_evaluator {
-    private:
-        const space4* space_;
-        facet_index facet_;
-
-        // dir x: 1 - y, 2 - z
-        // dir y: 1 - x, 2 - z
-        // dir z: 1 - x, 2 - y
-        bspline_basis_values vals_interval1_;
-        bspline_basis_values vals_interval2_;
-        bspline_basis_values vals_interval3_;
-
-        bspline_basis_values_on_vertex vals_point_;
-
-    public:
-        // using point_index = face_quadrature_points::point_index;
-        using point_index = std::tuple<int, int, int>;
-
-        face_evaluator(const space4* space, facet_index facet, bspline_basis_values vals_interval1,
-                       bspline_basis_values vals_interval2, bspline_basis_values vals_interval3,
-                       bspline_basis_values_on_vertex vals_point) noexcept
-        : space_{space}
-        , facet_{facet}
-        , vals_interval1_{std::move(vals_interval1)}
-        , vals_interval2_{std::move(vals_interval2)}
-        , vals_interval3_{std::move(vals_interval3)}
-        , vals_point_{std::move(vals_point)} { }
-
-        auto operator()(dof_index dof, point_index q, point normal) const noexcept
-            -> facet_value<value_type4> {
-            const auto [ix, iy, iz, iw] = space_->index_on_facet(dof, facet_);
-            const auto [nx, ny, nz, nw] = normal;
-            const auto [q1, q2, q3] = q;
-
-            if (facet_.dir == orientation4::dir_x) {
-                // 1 - y, 2 - z
-                const auto val_y = [&, iy = iy, q1 = q1](int der) {
-                    return vals_interval1_(q1, iy, der);
-                };
-                const auto val_z = [&, iz = iz, q2 = q2](int der) {
-                    return vals_interval2_(q2, iz, der);
-                };
-                const auto val_w = [&, iw = iw, q3 = q3](int der) {
-                    return vals_interval2_(q3, iw, der);
-                };
-                const auto avg_x = [&, ix = ix](int der) { return vals_point_.average(ix, der); };
-                const auto jump_x = [&, ix = ix, nx = nx](int der) {
-                    return vals_point_.jump(ix, der, nx);
-                };
-
-                const auto avg = eval_tensor_basis(avg_x, val_y, val_z, val_w);
-                const auto jump = eval_tensor_basis(jump_x, val_y, val_z, val_w);
-
-                return {avg, jump};
-            } else if (facet_.dir == orientation4::dir_y) {
-                // dir y: 1 - x, 2 - z
-                const auto val_x = [&, ix = ix, q1 = q1](int der) {
-                    return vals_interval1_(q1, ix, der);
-                };
-                const auto val_z = [&, iz = iz, q2 = q2](int der) {
-                    return vals_interval2_(q2, iz, der);
-                };
-                const auto val_w = [&, iw = iw, q3 = q3](int der) {
-                    return vals_interval2_(q3, iw, der);
-                };
-                const auto avg_y = [&, iy = iy](int der) { return vals_point_.average(iy, der); };
-                const auto jump_y = [&, iy = iy, ny = ny](int der) {
-                    return vals_point_.jump(iy, der, ny);
-                };
-
-                const auto avg = eval_tensor_basis(val_x, avg_y, val_z, val_w);
-                const auto jump = eval_tensor_basis(val_x, jump_y, val_z, val_w);
-
-                return {avg, jump};
-            } else if (facet_.dir == orientation4::dir_z) {
-                // dir y: 1 - x, 2 - z
-                const auto val_x = [&, ix = ix, q1 = q1](int der) {
-                    return vals_interval1_(q1, ix, der);
-                };
-                const auto val_y = [&, iy = iy, q1 = q1](int der) {
-                    return vals_interval1_(q1, iy, der);
-                };
-                const auto val_w = [&, iw = iw, q3 = q3](int der) {
-                    return vals_interval2_(q3, iw, der);
-                };
-                const auto avg_z = [&, iz = iz](int der) { return vals_point_.average(iz, der); };
-                const auto jump_z = [&, iz = iz, nz = nz](int der) {
-                    return vals_point_.jump(iz, der, nz);
-                };
-
-                const auto avg = eval_tensor_basis(val_x, val_y, avg_z, val_w);
-                const auto jump = eval_tensor_basis(val_x, val_y, jump_z, val_w);
-
-                return {avg, jump};
-            } else {
-                // dir z: 1 - x, 2 - y
-                const auto val_x = [&, ix = ix, q1 = q1](int der) {
-                    return vals_interval1_(q1, ix, der);
-                };
-                const auto val_y = [&, iy = iy, q2 = q2](int der) {
-                    return vals_interval2_(q2, iy, der);
-                };
-                const auto val_z = [&, iz = iz, q2 = q2](int der) {
-                    return vals_interval2_(q2, iz, der);
-                };
-                const auto avg_w = [&, iw = iw](int der) { return vals_point_.average(iw, der); };
-                const auto jump_w = [&, iw = iw, nw = nw](int der) {
-                    return vals_point_.jump(iw, der, nw);
-                };
-
-                const auto avg = eval_tensor_basis(val_x, val_y, val_z, avg_w);
-                const auto jump = eval_tensor_basis(val_x, val_y, val_z, jump_w);
-
-                return {avg, jump};
-            }
-        }
-    };
-
-    auto index_on_element(dof_index dof, element_index e) const noexcept -> dof_index {
-        const auto [ex, ey, ez, ew] = e;
-        const auto [dx, dy, dz, dw] = dof;
-
-        const auto ix = space_x_.local_index(dx, ex);
-        const auto iy = space_y_.local_index(dy, ey);
-        const auto iz = space_z_.local_index(dz, ez);
-        const auto iw = space_w_.local_index(dw, ew);
-
-        return {ix, iy, iz, iw};
-    }
-
-    auto index_on_facet(dof_index dof, facet_index f) const noexcept -> dof_index {
-        const auto [fx, fy, fz, fw, dir] = f;
-        const auto [dx, dy, dz, dw] = dof;
-
-        if (dir == orientation4::dir_x) {
-            const auto ix = space_x_.facet_local_index(dx, fx);
-            const auto iy = space_y_.local_index(dy, fy);
-            const auto iz = space_z_.local_index(dz, fz);
-            const auto iw = space_w_.local_index(dw, fw);
-            return {ix, iy, iz, iw};
-        } else if (dir == orientation4::dir_y) {
-            const auto ix = space_x_.local_index(dx, fx);
-            const auto iy = space_y_.facet_local_index(dy, fy);
-            const auto iz = space_z_.local_index(dz, fz);
-            const auto iw = space_w_.local_index(dw, fw);
-            return {ix, iy, iz, iw};
-        } else if (dir == orientation4::dir_z) {
-            const auto ix = space_x_.local_index(dx, fx);
-            const auto iy = space_y_.local_index(dy, fy);
-            const auto iz = space_z_.facet_local_index(dz, fz);
-            const auto iw = space_w_.local_index(dw, fw);
-            return {ix, iy, iz, iw};
-        } else {
-            assert(dir == orientation4::dir_w && "Invalid face orientation");
-            const auto ix = space_x_.local_index(dx, fx);
-            const auto iy = space_y_.local_index(dy, fy);
-            const auto iz = space_z_.local_index(dz, fz);
-            const auto iw = space_w_.facet_local_index(dw, fw);
-            return {ix, iy, iz, iw};
-        }
-    }
-
-    auto linearized(dof_index dof, std::array<int, 4> bounds) const noexcept -> simple_index {
-        const auto [ix, iy, iz, iw] = dof;
-        const auto [nx, ny, nz, nw] = bounds;
-        const auto order = reverse_ordering<4>{{nx, ny, nz, nw}};
-        return order.linear_index(ix, iy, iz, iw);
-    }
-};
-
 class bspline_function3 {
 private:
     const space3* space_;
@@ -3033,67 +2075,6 @@ private:
 
         std::scoped_lock guard{ctx_lock_};
         return bspline::eval(x, y, z, coeffs, bx, by, bz, ctx_x_, ctx_y_, ctx_z_);
-    }
-};
-
-class bspline_function4 {
-private:
-    const space4* space_;
-    const double* coefficients_;
-    mutable bspline::eval_ctx ctx_x_;
-    mutable bspline::eval_ctx ctx_y_;
-    mutable bspline::eval_ctx ctx_z_;
-    mutable bspline::eval_ctx ctx_w_;
-    mutable std::mutex ctx_lock_;
-
-public:
-    using point = space4::point;
-
-    bspline_function4(const space4* space, const double* coefficients)
-    : space_{space}
-    , coefficients_{coefficients}
-    , ctx_x_{space->space_x().degree()}
-    , ctx_y_{space->space_y().degree()}
-    , ctx_z_{space->space_z().degree()}
-    , ctx_w_{space->space_w().degree()} { }
-
-    auto operator()(point p) const noexcept -> double { return eval_(p); }
-
-    auto operator()(point p, const regular_mesh4::face_data& face) const noexcept
-        -> facet_value<double> {
-        // TODO: implement this correctly
-        if (face.type == facet_type::interior) {
-            const auto [px, py, pz, pw] = p;
-            const auto [nx, ny, nz, nw] = face.normal;
-            const auto eps = 1e-16;
-            const auto before = point{px - eps * nx, py - eps * ny, pz - eps * nz, pw - eps * nw};
-            const auto after = point{px + eps * nx, py + eps * ny, pz + eps * nz, pw + eps * nw};
-
-            const auto v0 = eval_(before);
-            const auto v1 = eval_(after);
-            return {0.5 * (v0 + v1), v0 - v1};
-        } else {
-            const auto v = eval_(p);
-            return {v, v};
-        }
-    }
-
-private:
-    auto eval_(point p) const noexcept -> double {
-        const auto [x, y, z, w] = p;
-
-        auto coeffs = [this](int i, int j, int k, int l) {
-            const auto idx = space_->global_index({i, j, k, l});
-            return coefficients_[idx];
-        };
-
-        const auto& bx = space_->space_x().basis();
-        const auto& by = space_->space_y().basis();
-        const auto& bz = space_->space_z().basis();
-        const auto& bw = space_->space_w().basis();
-
-        std::scoped_lock guard{ctx_lock_};
-        return bspline::eval(x, y, z, w, coeffs, bx, by, bz, bw, ctx_x_, ctx_y_, ctx_z_, ctx_w_);
     }
 };
 
@@ -3525,24 +2506,6 @@ auto save_to_file(const std::string& path, Funs&&... funs) -> void {
             out.print("{} {}", x, y);
             (out.print(" {:.7}", funs({x, y})), ...);
             out.print("\n");
-        }
-    }
-}
-
-template <typename... Funs>
-auto save_to_file4(const std::string& path, Funs&&... funs) -> void {
-    constexpr auto res = 20;
-    auto out = fmt::output_file(path);
-
-    for (auto x : ads::evenly_spaced(0.0, 1.0, res)) {
-        for (auto y : ads::evenly_spaced(0.0, 1.0, res)) {
-            for (auto z : ads::evenly_spaced(0.0, 1.0, res)) {
-                for (auto w : ads::evenly_spaced(0.0, 1.0, res)) {
-                    out.print("{} {} {} {}", x, y, z, w);
-                    (out.print(" {:.7}", funs({x, y, z, w})), ...);
-                    out.print("\n");
-                }
-            }
         }
     }
 }
