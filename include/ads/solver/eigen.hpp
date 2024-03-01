@@ -34,23 +34,17 @@ struct problem {
 
 
     void add(int row, int col, double value) {
-        cols_.push_back(col);
-        rows_.push_back(row);
-        values_.push_back(value);   
+        triplets_.push_back(Eigen::Triplet<double>(row, col, value));
     }
 
-    int nonzero_entries() const { return  narrow_cast<int> (values_.size()); }
+    int nonzero_entries() const { return  narrow_cast<int> (triplets_.size()); }
 
     int dofs() const { return n; }
 
     Eigen::SparseMatrix<double>& a() { return a_; }
 
     void prepare_data() {
-        std::vector<Eigen::Triplet<double>> triplets;
-
-        int triplets_num = static_cast<int> (values_.size());
-        for (int i = 0; i < triplets_num; ++i) triplets.push_back(Eigen::Triplet<double>(rows_[i], cols_[i], values_[i]));
-        a_.setFromTriplets(triplets.begin(), triplets.end());
+        a_.setFromTriplets(triplets_.begin(), triplets_.end());
 
         for (int i = 0; i < n; ++i) rhs_(i) = rhs_data_[i];
     }
@@ -69,12 +63,13 @@ private:
     int n;
     Eigen::VectorXd rhs_;
     Eigen::SparseMatrix<double> a_;
+    std::vector<Eigen::Triplet<double>> triplets_;
 };
 
 
 class solver {
 private:
-    Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver_;
+    Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver_;
     int max_iter_ = 0;
 public:
     solver() { }
@@ -96,7 +91,7 @@ public:
         if (outputFile.is_open()) {
 
             outputFile << "ROW   |   COL   |   VALUE \n";
-            for (int k=0; k<3; ++k) {
+            for (int k=0; k<problem.a().outerSize(); ++k) {
                 for (Eigen::SparseMatrix<double>::InnerIterator a_el(problem.a(),k); a_el; ++a_el) {
                     outputFile << a_el.row() << " " << a_el.col() << " " << a_el.value() << std::endl;
                 }

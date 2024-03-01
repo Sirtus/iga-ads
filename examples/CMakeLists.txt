@@ -28,19 +28,19 @@ add_example(heat_1d
   SRC
   heat/heat_1d.cpp)
 
-add_example(spacetime-heat MUMPS GALOIS
+add_example(spacetime-heat MUMPS GALOIS EIGEN
   SRC
   dg/heat.cpp
   LIBS
   bfg::lyra
 )
 
-add_example(spacetime-maxwell MUMPS GALOIS
-  SRC
-  dg/maxwell4D.cpp
-  LIBS
-    bfg::lyra
-)
+# add_example(spacetime-maxwell MUMPS GALOIS
+#   SRC
+#   dg/maxwell4D.cpp
+#   LIBS
+#     bfg::lyra
+# )
 
 add_example(heat_2d GALOIS
   SRC
@@ -50,11 +50,6 @@ add_example(heat_3d
   SRC
   heat/heat_3d.cpp)
 
-add_example(spacetime-heat MUMPS GALOIS EIGEN                                        
-  SRC                                                                           
-  dg/heat.cpp                                                                   
-  LIBS                                                                          
-  bfg::lyra)
 
 add_example(scalability GALOIS
   SRC
