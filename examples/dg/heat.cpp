@@ -98,7 +98,7 @@ auto galerkin_eigen_main(int /*argc*/, char* /*argv*/[]) -> void {
 
     auto F = std::vector<double>(n);
     auto problem = ads::eigen::problem{F.data(), n};
-    auto solver = ads::eigen::solver{50};
+    auto solver = ads::eigen::solver{};
 
     auto mat = ads::horrible_sparse_matrix{};
     auto M = [&mat](int row, int col, double val) { mat(row, col) += val; };
@@ -170,15 +170,17 @@ auto galerkin_eigen_main(int /*argc*/, char* /*argv*/[]) -> void {
     fmt::print("Equation system preparation\n");
     problem.prepare_data();
 
-    fmt::print("Solving\n");
-    auto xx = solver.solve(problem);
+    fmt::print("Saving matrix to file\n");
+    solver.save_to_file(problem, "matrix");
 
-    auto u = ads::bspline_function3(&U, xx.data());
+    fmt::print("Solving\n");
+    auto eigein_result = solver.solve(problem);
+
+    auto u = ads::bspline_function3(&U, eigein_result);
     fmt::print("Saving\n");
-    save_heat_to_file("dup-full.vti", T, u);
+    save_heat_to_file("dup-full-eigen.vti", T, u);
     fmt::print("Done\n");
 }
-
 
 
 void validate_args(lyra::cli const& cli, lyra::parse_result const& result, bool show_help) {
