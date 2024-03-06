@@ -21,11 +21,12 @@
 namespace ads::eigen {
 
 struct problem {
-    problem(double* rhs, int n)
+    problem(double* rhs, int n, int matrix_space = 0)
     : rhs_data_{rhs}
     , n{n} { 
         rhs_.resize(n+1);
         a_.resize(n+1, n+1);
+        if (matrix_space) a_.reserve(Eigen::VectorXi::Constant(n+1,1000));
     }
 
     explicit problem(std::vector<double>& rhs)
@@ -37,14 +38,15 @@ struct problem {
         triplets_.push_back(Eigen::Triplet<double>(row, col, value));
     }
 
-    int nonzero_entries() const { return  narrow_cast<int> (triplets_.size()); }
+    int nonzero_entries() const { return  narrow_cast<int> (a_.nonZeros()); }
 
     int dofs() const { return n; }
 
     Eigen::SparseMatrix<double>& a() { return a_; }
 
     void prepare_data() {
-        a_.setFromTriplets(triplets_.begin(), triplets_.end());
+
+        if (triplets_.size()) a_.setFromTriplets(triplets_.begin(), triplets_.end());
 
         for (int i = 0; i < n; ++i) rhs_(i) = rhs_data_[i];
     }
@@ -71,6 +73,7 @@ class solver {
 private:
     Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver_;
     int max_iter_ = 0;
+    Eigen::VectorXd result;
 public:
     solver() { }
     solver(int max_iter) : max_iter_{max_iter} { }
@@ -118,10 +121,10 @@ public:
 
     double* solve(problem& problem) {
         prepare_(problem);
-        double* result = solve_(problem);
+        solve_(problem);
         std::cout << "#Solver: iterations:     " << solver_.iterations() << std::endl;
         std::cout << "#Solver: estimated error: " << solver_.error()      << std::endl;
-        return result;
+        return result.data();
     }
 
     ~solver() { }
@@ -132,10 +135,7 @@ private:
         if (max_iter_) solver_.setMaxIterations(max_iter_);
     }
 
-    double* solve_(problem& problem) {
-        Eigen::VectorXd x = solver_.compute(problem.a()).solve(problem.rhs());
-        return x.data();
-    }
+    void solve_(problem& problem) { result = solver_.compute(problem.a()).solve(problem.rhs()); }
 
 };
 
