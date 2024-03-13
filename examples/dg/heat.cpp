@@ -342,9 +342,9 @@ auto galerkin_main4D(int /*argc*/, char* /*argv*/[]) -> void {
 }
 
 auto galerkin_main4D_eigen(int /*argc*/, char* /*argv*/[]) -> void {
-    auto const elems = 16;
-    auto const p = 2;
-    auto const c = 1;
+    auto const elems = 4;
+    auto const p = 1;
+    auto const c = 0;
     auto const T = 1;
     auto const eps = 5 * 1.0e-3;
     auto const s = 1 * 1.0;
@@ -495,6 +495,7 @@ auto galerkin_main4D_eigen(int /*argc*/, char* /*argv*/[]) -> void {
     auto u = ads::bspline_function4(&U, eigein_result);
     auto t_before_output = std::chrono::steady_clock::now();
     fmt::print("Saving\n");
+    solver.save_to_file(problem, "EIGEN_4D");
     save_heat_to_file4D("dup-full.vti", T, u);
     auto t_after_output = std::chrono::steady_clock::now();
     fmt::print("Done\n");
@@ -506,6 +507,79 @@ auto galerkin_main4D_eigen(int /*argc*/, char* /*argv*/[]) -> void {
     fmt::print("Eq Sys:  {:>8%Q %q}\n", as_ms(t_after_eq_prep - t_before_eq_prep));
     fmt::print("Solver:  {:>8%Q %q}\n", as_ms(t_after_solver - t_before_solver));
     fmt::print("Output:  {:>8%Q %q}\n", as_ms(t_after_output - t_before_output));
+
+}
+
+
+auto galerkin_main4D_eigen_read_from_file(int /*argc*/, char* /*argv*/[]) -> void {
+    auto const elems = 4;
+    auto const p = 1;
+    auto const c = 0;
+    auto const T = 1;
+    auto const eps = 5 * 1.0e-3;
+    auto const s = 1 * 1.0;
+    auto const beta_x = s * 0.0;
+    auto const beta_y = s * 1.0;
+    auto const beta_z = s * 1.0;
+
+    auto const xs = ads::evenly_spaced(0.0, 1.0, elems);
+    auto const ys = ads::evenly_spaced(0.0, 1.0, elems);
+    auto const zs = ads::evenly_spaced(0.0, 1.0, elems);
+    auto const ts = ads::evenly_spaced(0.0, T, 32);
+    // auto const ts = ads::evenly_spaced(0.0, T, 32);
+
+    auto const bx = ads::make_bspline_basis(xs, p, c);
+    auto const by = ads::make_bspline_basis(ys, p, c);
+    auto const bz = ads::make_bspline_basis(zs, p, c);
+    auto const bt = ads::make_bspline_basis(ts, p, c);
+
+    auto mesh = ads::regular_mesh4{xs, ys, zs, ts};
+    auto quad = ads::quadrature4{&mesh, std::max(p + 1, 2)};
+
+    auto spaces = ads::space_factory{};
+
+    auto const U = spaces.next<ads::space4>(&mesh, bx, by, bz, bt);
+    auto const Vx = spaces.next<ads::space4>(&mesh, bx, by, bz, bt);
+    auto const Vy = spaces.next<ads::space4>(&mesh, bx, by, bz, bt);
+    auto const Vz = spaces.next<ads::space4>(&mesh, bx, by, bz, bt);
+
+    auto const n = spaces.dim();
+    fmt::print("Dimension: {}\n", n);
+
+    auto problem = ads::eigen::problem{NULL, n};
+    auto solver = ads::eigen::solver{500};
+
+    auto t_before_read_files = std::chrono::steady_clock::now();
+    solver.read_problem_from_file(problem, "EIGEN_4D");
+    auto t_after_read_files = std::chrono::steady_clock::now();
+
+
+
+    auto t_before_eq_prep = std::chrono::steady_clock::now();
+    fmt::print("Equation system preparation\n");
+    problem.prepare_data();
+
+    fmt::print("Non-zeros: {}\n", problem.nonzero_entries());
+    auto t_after_eq_prep = std::chrono::steady_clock::now();
+
+    auto t_before_solver = std::chrono::steady_clock::now();
+    fmt::print("Solving\n");
+    auto eigein_result = solver.solve(problem);
+    auto t_after_solver = std::chrono::steady_clock::now();
+
+    auto u = ads::bspline_function4(&U, eigein_result);
+    auto t_before_output = std::chrono::steady_clock::now();
+    fmt::print("Saving\n");
+    save_heat_to_file4D("dup-full.vti", T, u);
+    auto t_after_output = std::chrono::steady_clock::now();
+    fmt::print("Done\n");
+
+    auto as_ms = [](auto d) { return std::chrono::duration_cast<std::chrono::milliseconds>(d); };
+
+    fmt::print("Reading:  {:>8%Q %q}\n", as_ms(t_after_read_files - t_before_read_files));
+    fmt::print("Eq Sys :  {:>8%Q %q}\n", as_ms(t_after_eq_prep - t_before_eq_prep));
+    fmt::print("Solver :  {:>8%Q %q}\n", as_ms(t_after_solver - t_before_solver));
+    fmt::print("Output :  {:>8%Q %q}\n", as_ms(t_after_output - t_before_output));
 
 }
 
