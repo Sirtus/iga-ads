@@ -70,9 +70,9 @@ class maxwell_base : public ads::simulation_3d {
 private:
     using Base = ads::simulation_3d;
 
-    ads::galois_executor executor{4};
-
 protected:
+    ads::galois_executor executor{8};
+
     explicit maxwell_base(ads::config_3d const& config)
     : Base{config} { }
 
@@ -103,10 +103,6 @@ protected:
         compute_rhs(rhs.E3, prev, prev, U, U.E3, [=](auto E, auto, auto H, auto v, auto x) {
             return (E[Z].val + a(x) * (H[Y].dx - H[X].dy)) * v.val + b(x) * E[X].dz * v.dx;
         });
-
-        zero_sides("yz", rhs.E1, U.E1);
-        zero_sides("xz", rhs.E2, U.E2);
-        zero_sides("xy", rhs.E3, U.E3);
     }
 
     template <typename C>
@@ -126,10 +122,6 @@ protected:
         compute_rhs(rhs.H3, prev, mid, U, U.H3, [=](auto E, auto En, auto H, auto v, auto x) {
             return (H[Z].val - c(x) * (E[Y].dx - En[X].dy)) * v.val;
         });
-
-        zero_sides("x", rhs.H1, U.H1);
-        zero_sides("y", rhs.H2, U.H2);
-        zero_sides("z", rhs.H3, U.H3);
     }
 
     template <typename A, typename B>
@@ -149,10 +141,6 @@ protected:
         compute_rhs(rhs.E3, prev, prev, U, U.E3, [=](auto E, auto, auto H, auto v, auto x) {
             return (E[Z].val + a(x) * (H[Y].dx - H[X].dy)) * v.val + b(x) * E[Y].dz * v.dy;
         });
-
-        zero_sides("yz", rhs.E1, U.E1);
-        zero_sides("xz", rhs.E2, U.E2);
-        zero_sides("xy", rhs.E3, U.E3);
     }
 
     template <typename C>
@@ -172,7 +160,15 @@ protected:
         compute_rhs(rhs.H3, prev, mid, U, U.H3, [=](auto E, auto En, auto H, auto v, auto x) {
             return (H[Z].val - c(x) * (En[Y].dx - E[X].dy)) * v.val;
         });
+    }
 
+    auto apply_bc_E(state& rhs, space_set const& U) const -> void {
+        zero_sides("yz", rhs.E1, U.E1);
+        zero_sides("xz", rhs.E2, U.E2);
+        zero_sides("xy", rhs.E3, U.E3);
+    }
+
+    auto apply_bc_H(state& rhs, space_set const& U) const -> void {
         zero_sides("x", rhs.H1, U.H1);
         zero_sides("y", rhs.H2, U.H2);
         zero_sides("z", rhs.H3, U.H3);
@@ -182,6 +178,12 @@ protected:
     void compute_rhs(RHS& rhs, state const& prev, state const& mid, space_set const& U,
                      space const& V, Form&& form) {
         zero(rhs);
+        add_to_rhs(rhs, prev, mid, U, V, std::forward<Form>(form));
+    }
+
+    template <typename RHS, typename Form>
+    void add_to_rhs(RHS& rhs, state const& prev, state const& mid, space_set const& U,
+                    space const& V, Form&& form) {
         auto const shape = ::local_shape(V);
 
         executor.for_each(elements(V.x, V.y, V.z), [&](auto const e) {
