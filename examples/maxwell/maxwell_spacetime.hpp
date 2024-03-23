@@ -13,6 +13,8 @@
 #include "ads/experimental/horrible_sparse_matrix.hpp"
 #include "ads/experimental/space_factory.hpp"
 
+#include "spacetime_plane_wave_problem.hpp"
+
 template <typename U>
 auto save_heat_to_file(std::string const& path, double time, U const& u) -> void {
     constexpr auto res = 50;
@@ -69,11 +71,11 @@ auto save_heat_to_file4D(std::string const& path, double time, U const& u) -> vo
 constexpr double pi = M_PI;
 
 
-auto galerkin_main4D(int /*argc*/, char* /*argv*/[]) -> void {
+auto maxwell_spacetime_main(int /*argc*/, char* /*argv*/[]) -> void {
     auto const elems = 4;
-    auto const x_elems = 32;
+    auto const x_elems = 2;
     auto const y_elems = 2;
-    auto const z_elems = 2;
+    auto const z_elems = 32;
     auto const t_elems = 16;
     
     auto const p = 1;
@@ -139,30 +141,30 @@ auto galerkin_main4D(int /*argc*/, char* /*argv*/[]) -> void {
 
     ///
     // Ex
-    assemble(Vx, quad, M, [](auto sx, auto tx, auto /*x*/) {return  -(eps    * sx.dw * tx.dw); });
-    assemble(Vx, quad, M, [](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dy * tx.dy); });
-    assemble(Vx, quad, M, [](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dz * tx.dz); });
-    assemble(Vy, quad, M, [](auto sy, auto ty, auto /*x*/) {return  -(mu_inv * sy.dx * tx.dy); });
-    assemble(Vz, quad, M, [](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dx * tx.dz); });
+    assemble(Vx, quad, M,    [eps](auto sx, auto tx, auto /*x*/) {return  -(eps    * sx.dw * tx.dw); });
+    assemble(Vx, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dy * tx.dy); });
+    assemble(Vx, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dz * tx.dz); });
+    assemble(Vy, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return  -(mu_inv * sy.dx * ty.dy); });
+    assemble(Vz, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dx * tz.dz); });
 
     // Ey
-    assemble(Vx, quad, M, [](auto sx, auto tx, auto /*x*/) {return  -(mu_inv * sx.dy * ty.dx); });
-    assemble(Vy, quad, M, [](auto sy, auto ty, auto /*x*/) {return  -(eps    * sy.dw * ty.dw); });
-    assemble(Vy, quad, M, [](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dy * ty.dy); });
-    assemble(Vy, quad, M, [](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dz * ty.dz); });
-    assemble(Vz, quad, M, [](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dy * ty.dz); });
+    assemble(Vx, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return  -(mu_inv * sx.dy * tx.dx); });
+    assemble(Vy, quad, M,    [eps](auto sy, auto ty, auto /*x*/) {return  -(eps    * sy.dw * ty.dw); });
+    assemble(Vy, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dy * ty.dy); });
+    assemble(Vy, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dz * ty.dz); });
+    assemble(Vz, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dy * tz.dz); });
 
     // Ez
-    assemble(Vx, quad, M, [](auto sx, auto tx, auto /*x*/) {return  -(mu_inv * sx.dz * tz.dx); });
-    assemble(Vy, quad, M, [](auto sy, auto ty, auto /*x*/) {return  -(mu_inv * sy.dz * tz.dy); });
-    assemble(Vz, quad, M, [](auto sz, auto tz, auto /*x*/) {return  -(eps    * sz.dw * tz.dw); });
-    assemble(Vz, quad, M, [](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dx * tz.dx); });
-    assemble(Vz, quad, M, [](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dy * tz.dy); });
+    assemble(Vx, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return  -(mu_inv * sx.dz * tx.dx); });
+    assemble(Vy, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return  -(mu_inv * sy.dz * ty.dy); });
+    assemble(Vz, quad, M,    [eps](auto sz, auto tz, auto /*x*/) {return  -(eps    * sz.dw * tz.dw); });
+    assemble(Vz, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dx * tz.dx); });
+    assemble(Vz, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dy * tz.dy); });
 
     fmt::print("Assembling RHS\n");
     assemble_rhs(U, quad, rhs, [](auto v, auto /*x*/) { return 0 * v.val; });
 
-    assemble_rhs(Vx, quad, rhs, [](auto v, auto /*x*/) { return ; }); //psi
+    assemble_rhs(Vx, quad, rhs, [](auto v, auto /*x*/) { return 0; }); //psi
 
     fmt::print("Collecting BC\n");
     auto is_fixed = std::vector<int>(n);
@@ -239,9 +241,4 @@ auto galerkin_main4D(int /*argc*/, char* /*argv*/[]) -> void {
     fmt::print("Saving\n");
     save_heat_to_file4D("dup-full.vti", T, u);
     fmt::print("Done\n");
-}
-
-
-auto main(int argc, char* argv[]) -> int {
-    galerkin_main4D(argc, argv);
 }

@@ -35,12 +35,6 @@ add_example(spacetime-heat MUMPS GALOIS EIGEN
   bfg::lyra
 )
 
-# add_example(spacetime-maxwell MUMPS GALOIS
-#   SRC
-#   dg/maxwell4D.cpp
-#   LIBS
-#     bfg::lyra
-# )
 
 add_example(heat_2d GALOIS
   SRC
@@ -182,6 +176,13 @@ add_example(maxwell_cauchy GALOIS
     ads-example-maxwell-common
 )
 
+add_example(maxwell_cauchy_plane_wave GALOIS
+  SRC
+    maxwell/main_cauchy_plane_wave.cpp
+  LIBS
+    ads-example-maxwell-common
+)
+
 add_example(maxwell_cauchy_head GALOIS
   SRC
     maxwell/main_cauchy_head.cpp
@@ -214,6 +215,14 @@ add_example(maxwell_ads GALOIS
   LIBS
     ads-example-maxwell-common
 )
+
+# add_example(maxwell_spacetime GALOIS MUMPS EIGEN
+#   SRC
+#     maxwell/main_spacetime.cpp
+#   LIBS
+#     ads-example-maxwell-common
+#     bfg::lyra
+# )
 
 add_example(tumor GALOIS
   SRC
