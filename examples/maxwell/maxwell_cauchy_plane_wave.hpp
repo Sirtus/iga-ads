@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2015 - 2021 Marcin Łoś <marcin.los.91@gmail.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef MAXWELL_MAXWELL_CAUCHY_HPP
-#define MAXWELL_MAXWELL_CAUCHY_HPP
+#ifndef MAXWELL_MAXWELL_CAUCHY_PLANE_WAVE_HPP
+#define MAXWELL_MAXWELL_CAUCHY_PLANE_WAVE_HPP
 
 #include <iostream>
 #include <utility>
@@ -20,7 +20,7 @@
 #include "state.hpp"
 #include "utils.hpp"
 
-class maxwell_cauchy : public maxwell_base {
+class maxwell_cauchy_plane_wave : public maxwell_base {
 private:
     using Base = maxwell_base;
     using Problem = plane_wave_problem;
@@ -44,7 +44,7 @@ private:
     ads::output_manager<3> output;
 
 public:
-    explicit maxwell_cauchy(ads::config_3d const& config, ads::regular_mesh3 const& mesh,
+    explicit maxwell_cauchy_plane_wave(ads::config_3d const& config, ads::regular_mesh3 const& mesh,
                             ads::quadrature3 const& quad, ads::space3& space)
     : Base{config}
     , V{x, y, z}
@@ -391,4 +391,4 @@ private:
     }
 };
 
-#endif  // MAXWELL_MAXWELL_CAUCHY_HPP
+#endif  // MAXWELL_MAXWELL_CAUCHY_PLANE_WAVE_HPP

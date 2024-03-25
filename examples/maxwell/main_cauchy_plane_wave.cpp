@@ -8,7 +8,7 @@
 
 #include "ads/experimental/all.hpp"
 #include "maxwell_base.hpp"
-#include "maxwell_cauchy.hpp"
+#include "maxwell_cauchy_plane_wave.hpp"
 
 auto parse_args(int argc, char* argv[]) {
     struct {
@@ -72,6 +72,6 @@ int main(int argc, char* argv[]) {
 
     auto space = ads::space3{&mesh, bx, by, bz};
 
-    auto sim = maxwell_cauchy{cfg, mesh, quad, space};
+    auto sim = maxwell_cauchy_plane_wave{cfg, mesh, quad, space};
     sim.run();
 }
