@@ -216,13 +216,13 @@ add_example(maxwell_ads GALOIS
     ads-example-maxwell-common
 )
 
-# add_example(maxwell_spacetime GALOIS MUMPS EIGEN
-#   SRC
-#     maxwell/main_spacetime.cpp
-#   LIBS
-#     ads-example-maxwell-common
-#     bfg::lyra
-# )
+add_example(maxwell_spacetime GALOIS MUMPS EIGEN
+  SRC
+    maxwell/main_spacetime.cpp
+  LIBS
+    ads-example-maxwell-common
+    bfg::lyra
+)
 
 add_example(tumor GALOIS
   SRC
