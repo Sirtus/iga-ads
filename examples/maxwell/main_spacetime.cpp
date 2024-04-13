@@ -43,5 +43,6 @@ int main(int argc, char* argv[]) {
 
     // auto sim = maxwell_uniform{cfg};
     // sim.run();
-    maxwell_spacetime_main_eigen(argc, argv);
+    // maxwell_spacetime_main_eigen(argc, argv);
+    maxwell_spacetime_main_mumps(argc, argv);
 }
