@@ -105,7 +105,7 @@ auto save_maxwell_to_file(std::string const& path, double time, FEx const& fex, 
 
 template <typename FEx, typename FEy, typename FEz>
 auto save_maxwell_to_file4D(std::string const& path, double time, FEx const& fex, FEy const& fey, FEz const& fez) -> void {
-    constexpr auto res_time = 50;
+    constexpr auto res_time = 100;
 
     auto fex_at_fixed_t = [&](double t) {
       return [&, t](ads::point3_t p) {
@@ -647,10 +647,10 @@ auto maxwell_spacetime_main_eigen(int /*argc*/, char* /*argv*/[]) -> void {
 
 auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
 
-    auto const x_elems = 6;
-    auto const y_elems = 6;
-    auto const z_elems = 6;
-    auto const t_elems = 10;
+    auto const x_elems = 4;
+    auto const y_elems = 4;
+    auto const z_elems = 4;
+    auto const t_elems = 50;
     
     auto const p = 1;
     auto const c = 0;
@@ -658,7 +658,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     auto const eps = 8.854e-12;
     auto const mu  = 12.556e-7;
     auto const c0  = 1 / std::sqrt(eps * mu);
-    auto const T = z_elems / c0;
+    auto const T = 1;//z_elems / c0;
     auto const mu_inv = 1/mu;
     
 
@@ -666,7 +666,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     auto const xs = ads::evenly_spaced(0.0, 1.0, x_elems);
     auto const ys = ads::evenly_spaced(0.0, 1.0, y_elems);
     auto const zs = ads::evenly_spaced(0.0, 1.0, z_elems);
-    auto const ts = ads::evenly_spaced(0.0, 1.0, t_elems);
+    auto const ts = ads::evenly_spaced(0.0, T, t_elems);
     // auto const ts = ads::evenly_spaced(0.0, T, 32);
 
     auto const bx = ads::make_bspline_basis(xs, p, c);
@@ -700,9 +700,10 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     auto mesh_init = ads::regular_mesh3{xs, ys, zs};
     auto quad_init = ads::quadrature3{&mesh_init, std::max(p + 1, 2)};
     auto space_init = ads::space3{&mesh_init, bx, by, bz};
+    auto n_init = space_init.dof_count();
 
-    auto Fx_init = std::vector<double>(n);
-    auto problem_init = ads::mumps::problem{Fx_init.data(), n};
+    auto Fx_init = std::vector<double>(n_init);
+    auto problem_init = ads::mumps::problem{Fx_init.data(), n_init};
     // auto solver_init = ads::mumps::solver{};
 
     auto out_init = [&problem_init](int row, int col, double val) {
@@ -717,16 +718,16 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
 
     fmt::print("*\tE(x,t=0).y\n");
 
-    auto Fy_init = std::vector<double>(n);
-    problem_init = ads::mumps::problem{Fy_init.data(), n};
+    auto Fy_init = std::vector<double>(n_init);
+    problem_init = ads::mumps::problem{Fy_init.data(), n_init};
     auto rhs_init_y = [&Fy_init](int J, double val) { Fy_init[J] += val; };
     assemble(space_init, quad_init, out_init, [](auto u, auto v, auto /*x*/) { return u.val * v.val; });
     assemble_rhs(space_init, quad_init, rhs_init_y, [&ml_problem](auto v, auto x) { return ml_problem.E2({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).val * v.val; });
     solver.solve(problem_init);
 
     fmt::print("*\tE(x,t=0).z\n");
-    auto Fz_init = std::vector<double>(n);
-    problem_init = ads::mumps::problem{Fz_init.data(), n};
+    auto Fz_init = std::vector<double>(n_init);
+    problem_init = ads::mumps::problem{Fz_init.data(), n_init};
     auto rhs_init_z = [&Fz_init](int J, double val) { Fz_init[J] += val; };
     assemble(space_init, quad_init, out_init, [](auto u, auto v, auto /*x*/) { return u.val * v.val; });
     assemble_rhs(space_init, quad_init, rhs_init_z, [&ml_problem](auto v, auto x) { return ml_problem.E3({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).val * v.val; });
@@ -742,39 +743,19 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
 
     fmt::print("Assembling matrix\n");
 
-    // // Ex
-    // assemble(Ex, quad, M,    [eps](auto sx, auto tx, auto /*x*/) {return  -(eps    * sx.dw * tx.dw); });
-    // assemble(Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dy * tx.dy); });
-    // assemble(Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dz * tx.dz); });
-    // assemble(Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return  -(mu_inv * sy.dx * ty.dy); });
-    // assemble(Ez, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dx * tz.dz); });
-
-    // // Ey
-    // assemble(Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return  -(mu_inv * sx.dy * tx.dx); });
-    // assemble(Ey, quad, M,    [eps](auto sy, auto ty, auto /*x*/) {return  -(eps    * sy.dw * ty.dw); });
-    // assemble(Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dy * ty.dy); });
-    // assemble(Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dz * ty.dz); });
-    // assemble(Ez, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dy * tz.dz); });
-
-    // // Ez
-    // assemble(Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return  -(mu_inv * sx.dz * tx.dx); });
-    // assemble(Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return  -(mu_inv * sy.dz * ty.dy); });
-    // assemble(Ez, quad, M,    [eps](auto sz, auto tz, auto /*x*/) {return  -(eps    * sz.dw * tz.dw); });
-    // assemble(Ez, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dx * tz.dx); });
-    // assemble(Ez, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dy * tz.dy); });
 
     // Ex
-    assemble(Ex,Ex, quad, M,    [eps](auto sx, auto tx, auto /*x*/) {return  -(eps    * sx.dw * tx.dw); });
-    assemble(Ex,Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dy * tx.dy); });
-    assemble(Ex,Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dz * tx.dz); });
+    assemble(Ex, Ex, quad, M,    [eps](auto sx, auto tx, auto /*x*/) {return  -(eps    * sx.dw * tx.dw); });
+    assemble(Ex, Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dy * tx.dy); });
+    assemble(Ex, Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dz * tx.dz); });
     assemble(Ey, Ex, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return  -(mu_inv * sy.dx * ty.dy); });
     assemble(Ez, Ex, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dx * tz.dz); });
 
     // Ey
     assemble(Ex, Ey, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return  -(mu_inv * sx.dy * tx.dx); });
-    assemble(Ey,Ey, quad, M,    [eps](auto sy, auto ty, auto /*x*/) {return  -(eps    * sy.dw * ty.dw); });
-    assemble(Ey,Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dy * ty.dy); });
-    assemble(Ey,Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dz * ty.dz); });
+    assemble(Ey, Ey, quad, M,    [eps](auto sy, auto ty, auto /*x*/) {return  -(eps    * sy.dw * ty.dw); });
+    assemble(Ey, Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dy * ty.dy); });
+    assemble(Ey, Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dz * ty.dz); });
     assemble(Ez, Ey, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dy * tz.dz); });
 
     // Ez
@@ -784,10 +765,9 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     assemble(Ez, Ez, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dx * tz.dx); });
     assemble(Ez, Ez, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dy * tz.dy); });
 
+
     fmt::print("Assembling RHS\n");
     assemble_rhs(Ex, quad, rhs, [=](auto v, auto /*x*/) { return 0 * v.val; });
-    assemble_rhs(Ey, quad, rhs, [=](auto v, auto /*x*/) { return 0 * v.val; });
-    assemble_rhs(Ez, quad, rhs, [=](auto v, auto /*x*/) { return 0 * v.val; });
 
 
     fmt::print("Collecting BC\n");
@@ -849,7 +829,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                 // Matrix
                 for (auto const j : Ex.dofs(e)) {
                     auto const J = Ex.global_index(j);
-                    mat(I, J) = 1; // main diagonal
+                    mat(I, J) = 0; // main diagonal
                 }
                 for (auto const j : Ey.dofs(e)) {
                     auto const J = Ey.global_index(j);
@@ -859,6 +839,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                     auto const J = Ez.global_index(j);
                     mat(I, J) = 0;
                 }
+                mat(I, I) = 1;
                 // RHS
                 auto const [ix, iy, iz, it] = i;
                 if (it == 0) { // initial state
@@ -878,7 +859,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                 // Matrix
                 for (auto const j : Ey.dofs(e)) {
                     auto const J = Ey.global_index(j);
-                    mat(I, J) = 1; // main diagonal
+                    mat(I, J) = 0; // main diagonal
                 }
                 for (auto const j : Ex.dofs(e)) {
                     auto const J = Ex.global_index(j);
@@ -889,6 +870,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                     mat(I, J) = 0;
                 }
                 // RHS
+                mat(I, I) = 1;
                 auto const [ix, iy, iz, it] = i;
                 if (it == 0) { // initial state
                     auto const i_init = ads::index_types3::index{ix, iy, iz};
@@ -907,7 +889,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                 // Matrix
                 for (auto const j : Ez.dofs(e)) {
                     auto const J = Ez.global_index(j);
-                    mat(I, J) = 1; // main diagonal
+                    mat(I, J) = 0; // main diagonal
                 }
                 for (auto const j : Ey.dofs(e)) {
                     auto const J = Ey.global_index(j);
@@ -917,13 +899,13 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                     auto const J = Ex.global_index(j);
                     mat(I, J) = 0;
                 }
+                mat(I, I) = 1;
                 // RHS
                 auto const [ix, iy, iz, it] = i;
                 if (it == 0) { // initial state
                     auto const i_init = ads::index_types3::index{ix, iy, iz};
                     auto const I_init = space_init.global_index(i_init);
                     F[I] = Fz_init[I_init];
-                    fmt::print("TEST {} {} {} {}\n", ix, iy, iz, F[I]);
                 } else { // boundary
                     F[I] = 0;
                 }
@@ -940,6 +922,13 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
 
     fmt::print("Solving\n");
     solver.solve(problem);
+
+    auto const i_test4 = ads::index_types4::index{4,4,4,0};
+    auto const I_test4 = Ez.global_index(i_test4);
+    auto const i_test3 = ads::index_types3::index{4,4,4};
+    auto const I_test3 = space_init.global_index(i_test3);
+    fmt::print("TEST Ez0: {}  Ez_init: {}\n", F[I_test4], Fz_init[I_test3]);
+
 
     auto ex = ads::bspline_function4(&Ex, F.data());
     auto ey = ads::bspline_function4(&Ey, F.data());
