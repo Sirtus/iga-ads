@@ -602,7 +602,7 @@ auto maxwell_spacetime_main_eigen(int /*argc*/, char* /*argv*/[]) -> void {
                     auto const i_init = ads::index_types3::index{ix, iy, iz};
                     auto const I_init = space_init.global_index(i_init);
                     F[I] = Fz_init[I_init];
-                    fmt::print("TEST {} {} {} {} {} {} {}\n", ix, iy, iz, Fz_init[I_init], pw_problem.E({0.001,0.2,0.004},0).x, pw_problem.E({ix,iy,iz},0).y, pw_problem.E({ix,iy,iz},0).z);
+                    // fmt::print("TEST {} {} {} {} {} {} {}\n", ix, iy, iz, Fz_init[I_init], pw_problem.E({0.001,0.2,0.004},0).x, pw_problem.E({ix,iy,iz},0).y, pw_problem.E({ix,iy,iz},0).z);
                 } else { // boundary
                     F[I] = 0;
                 }
@@ -647,10 +647,10 @@ auto maxwell_spacetime_main_eigen(int /*argc*/, char* /*argv*/[]) -> void {
 
 auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
 
-    auto const x_elems = 4;
-    auto const y_elems = 4;
-    auto const z_elems = 4;
-    auto const t_elems = 50;
+    auto const x_elems = 6;
+    auto const y_elems = 6;
+    auto const z_elems = 6;
+    auto const t_elems = 10;
     
     auto const p = 1;
     auto const c = 0;
@@ -733,6 +733,21 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     assemble_rhs(space_init, quad_init, rhs_init_z, [&ml_problem](auto v, auto x) { return ml_problem.E3({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).val * v.val; });
     solver.solve(problem_init);
 
+    fmt::print("*\tPsi(x,t=0).x\n");
+    auto Fpsi_init_x = std::vector<double>(n_init);
+    auto rhs_init_psi_x = [&Fpsi_init_x](int J, double val) { Fpsi_init_x[J] += val; };
+    assemble_rhs(space_init, quad_init, rhs_init_psi_x, [&ml_problem, eps](auto v, auto x) { return  (ml_problem.H3({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dy - ml_problem.H2({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dz) * v.val; });
+
+    fmt::print("*\tPsi(x,t=0).y\n");
+    auto Fpsi_init_y = std::vector<double>(n_init);
+    auto rhs_init_psi_y = [&Fpsi_init_y](int J, double val) { Fpsi_init_y[J] += val; };
+    assemble_rhs(space_init, quad_init, rhs_init_psi_y, [&ml_problem, eps](auto v, auto x) { return  (ml_problem.H1({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dz - ml_problem.H3({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dx) * v.val; });
+
+    fmt::print("*\tPsi(x,t=0).z\n");
+    auto Fpsi_init_z = std::vector<double>(n_init);
+    auto rhs_init_psi_z = [&Fpsi_init_z](int J, double val) { Fpsi_init_z[J] += val; };
+    assemble_rhs(space_init, quad_init, rhs_init_psi_z, [&ml_problem, eps](auto v, auto x) { return  (ml_problem.H2({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dx - ml_problem.H1({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dy) * v.val; });
+
 
 
     // L2 projection - end
@@ -777,7 +792,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
         bool fix = false;
 
         // initial condition t = 0
-        fix = fix || it == 0;
+        fix = fix || it == Ex.space_w().dof_count() - 1;
 
         // spatial boundary - on y = 0, y = 1, z = 0, z = 1 we force Ex = 0
         fix = fix || iy == 0 || iy == Ex.space_y().dof_count() - 1;
@@ -793,7 +808,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
         bool fix = false;
 
         // initial condition t = 0
-        fix = fix || it == 0;
+        fix = fix || it == Ey.space_w().dof_count() - 1;
 
         // spatial boundary - on x = 0, x = 1, z = 0, z = 1 we force Ey = 0
         fix = fix || ix == 0 || ix == Ey.space_x().dof_count() - 1;
@@ -809,7 +824,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
         bool fix = false;
 
         // initial condition t = 0
-        fix = fix || it == 0;
+        fix = fix || it == Ez.space_w().dof_count() - 1;
 
         // spatial boundary - on x = 0, x = 1, y = 0, y = 1 we force Ez = 0
         fix = fix || ix == 0 || ix == Ez.space_x().dof_count() - 1;
@@ -839,15 +854,19 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                     auto const J = Ez.global_index(j);
                     mat(I, J) = 0;
                 }
-                mat(I, I) = 1;
+                
                 // RHS
                 auto const [ix, iy, iz, it] = i;
-                if (it == 0) { // initial state
+                if (it == Ex.space_w().dof_count() - 1) { // initial state
                     auto const i_init = ads::index_types3::index{ix, iy, iz};
                     auto const I_init = space_init.global_index(i_init);
+                    auto const i_new = ads::index_types4::index{ix, iy, iz, 0};
+                    auto const I_new = Ex.global_index(i_new);
+                    mat(I, I_new) = 1;
                     F[I] = Fx_init[I_init];
                 } else { // boundary
                     F[I] = 0;
+                    mat(I, I) = 1;
                 }
             }
         }
@@ -870,14 +889,18 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                     mat(I, J) = 0;
                 }
                 // RHS
-                mat(I, I) = 1;
+                
                 auto const [ix, iy, iz, it] = i;
-                if (it == 0) { // initial state
+                if (it == Ey.space_w().dof_count() - 1) { // initial state
                     auto const i_init = ads::index_types3::index{ix, iy, iz};
                     auto const I_init = space_init.global_index(i_init);
+                    auto const i_new = ads::index_types4::index{ix, iy, iz, 0};
+                    auto const I_new = Ey.global_index(i_new);
+                    mat(I, I_new) = 1;
                     F[I] = Fy_init[I_init];
                 } else { // boundary
                     F[I] = 0;
+                    mat(I, I) = 1;
                 }
             }
         }
@@ -899,19 +922,55 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                     auto const J = Ex.global_index(j);
                     mat(I, J) = 0;
                 }
-                mat(I, I) = 1;
+                
                 // RHS
                 auto const [ix, iy, iz, it] = i;
-                if (it == 0) { // initial state
+                if (it == Ez.space_w().dof_count() - 1) { // initial state
                     auto const i_init = ads::index_types3::index{ix, iy, iz};
                     auto const I_init = space_init.global_index(i_init);
+                    auto const i_new = ads::index_types4::index{ix, iy, iz, 0};
+                    auto const I_new = Ez.global_index(i_new);
+                    mat(I, I_new) = 1;
                     F[I] = Fz_init[I_init];
                 } else { // boundary
                     F[I] = 0;
+                    mat(I, I) = 1;
                 }
             }
         }
+    
     }
+
+    for (auto const i : Ex.dofs()) {
+        auto const I = Ex.global_index(i);
+        auto const [ix, iy, iz, it] = i;
+        if (it == 0) {
+            auto const i_init = ads::index_types3::index{ix, iy, iz};
+            auto const I_init = space_init.global_index(i_init);
+            F[I] += Fpsi_init_x[I_init];
+        }
+    }
+
+    for (auto const i : Ey.dofs()) {
+        auto const I = Ey.global_index(i);
+        auto const [ix, iy, iz, it] = i;
+        if (it == 0) {
+            auto const i_init = ads::index_types3::index{ix, iy, iz};
+            auto const I_init = space_init.global_index(i_init);
+            F[I] += Fpsi_init_y[I_init];
+        }
+    }
+
+    for (auto const i : Ez.dofs()) {
+        auto const I = Ez.global_index(i);
+        auto const [ix, iy, iz, it] = i;
+        if (it == 0) {
+            auto const i_init = ads::index_types3::index{ix, iy, iz};
+            auto const I_init = space_init.global_index(i_init);
+            F[I] += Fpsi_init_z[I_init];
+        }
+    }
+
 
     mat.mumpsify(problem);
 
