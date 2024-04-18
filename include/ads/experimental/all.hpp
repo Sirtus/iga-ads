@@ -1823,7 +1823,7 @@ public:
         const auto x = ptx_.coords(ix);
         const auto y = pty_.coords(iy);
         const auto z = ptz_.coords(iz);
-        const auto w = ptz_.coords(iw);
+        const auto w = ptw_.coords(iw);
         return {x, y, z, w};
     }
 
@@ -1832,7 +1832,7 @@ public:
         const auto wx = ptx_.weight(ix);
         const auto wy = pty_.weight(iy);
         const auto wz = ptz_.weight(iz);
-        const auto ww = ptz_.weight(iw);
+        const auto ww = ptw_.weight(iw);
         return wx * wy * wz * ww;
     }
 
@@ -2564,7 +2564,7 @@ public:
 
     auto space_z() const noexcept -> const bspline_space& { return space_z_; }
 
-    auto space_w() const noexcept -> const bspline_space& { return space_z_; }
+    auto space_w() const noexcept -> const bspline_space& { return space_w_; }
 
 
     auto dof_count() const noexcept -> int {
@@ -2766,7 +2766,7 @@ public:
             // 1 - x, 2 - y
             auto data_x = evaluate_basis(points.points1(), space_x_, ders);
             auto data_y = evaluate_basis(points.points2(), space_y_, ders);
-            auto data_z = evaluate_basis(points.points2(), space_z_, ders);
+            auto data_z = evaluate_basis(points.points3(), space_z_, ders);
             auto data_w = evaluate_basis(fw, space_w_, ders);
             return face_evaluator{
                 this, f, std::move(data_x), std::move(data_y), std::move(data_z), std::move(data_w),

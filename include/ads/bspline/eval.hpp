@@ -280,7 +280,7 @@ function_value_4d eval_ders(double x, double y, double z, double w, const U& u, 
     int spanx = find_span(x, bx);
     int spany = find_span(y, by);
     int spanz = find_span(z, bz);
-    int spanw = find_span(z, bw);
+    int spanw = find_span(w, bw);
 
     double** bvx = cx.basis_vals();
     double** bvy = cy.basis_vals();
