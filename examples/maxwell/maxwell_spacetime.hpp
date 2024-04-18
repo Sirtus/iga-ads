@@ -17,6 +17,67 @@
 #include "plane_wave_problem.hpp"
 #include "problems.hpp"
 
+template <typename Mesh, typename Quad, typename Problem, typename FEx, typename FEy, typename FEz>
+auto compute_norms_E(Mesh const& mesh, Quad const& quad, Problem const& problem, FEx const& fex, FEy const& fey, FEz const& fez, double time) {
+    auto ex_at_fixed_t = [&](double t) {
+      return [&, t](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return fex({x, y, z, t});
+      };
+    };
+
+    auto ey_at_fixed_t = [&](double t) {
+      return [&, t](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return fey({x, y, z, t});
+      };
+    };
+
+    auto ez_at_fixed_t = [&](double t) {
+      return [&, t](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return fez({x, y, z, t});
+      };
+    };
+    
+    auto refE1 = [&](double t) {
+      return [&, problem, t](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return problem.E1({x, y, z}, t).val;
+      };
+    };
+
+    auto refE2 = [&](double t) {
+      return [&, problem, t](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return problem.E1({x, y, z}, t).val;
+      };
+    };
+
+    auto refE3 = [&](double t) {
+      return [&, problem, t](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return problem.E1({x, y, z}, t).val;
+      };
+    };
+
+    auto max_timesteps = 10;
+    auto timestep = 0;
+    for (auto it : ads::evenly_spaced(0.0, time, max_timesteps)) {
+        auto err_ex = error(mesh, quad, L2{}, ex_at_fixed_t(it), refE1(it));
+        auto err_ey = error(mesh, quad, L2{}, ey_at_fixed_t(it), refE2(it));
+        auto err_ez = error(mesh, quad, L2{}, ez_at_fixed_t(it), refE3(it));
+        auto err    = sum_norms(err_ex, err_ey, err_ez);
+        fmt::print("  Timestep {}\n",timestep);
+        fmt::print("    L2 E.x  = {}\n",err_ex);
+        fmt::print("    L2 E.y  = {}\n",err_ey);
+        fmt::print("    L2 E.z  = {}\n",err_ez);
+        fmt::print("    L2 err  = {}\n",err);
+        timestep++;
+    }
+
+}
+
 template <typename U>
 auto save_heat_to_file(std::string const& path, double time, U const& u) -> void {
     constexpr auto res = 50;
@@ -658,7 +719,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     auto const eps = 8.854e-12;
     auto const mu  = 12.556e-7;
     auto const c0  = 1 / std::sqrt(eps * mu);
-    auto const T = 1;//z_elems / c0;
+    auto const T = 1.0;//z_elems / c0;
     auto const mu_inv = 1/mu;
     
 
@@ -736,17 +797,17 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     fmt::print("*\tPsi(x,t=0).x\n");
     auto Fpsi_init_x = std::vector<double>(n_init);
     auto rhs_init_psi_x = [&Fpsi_init_x](int J, double val) { Fpsi_init_x[J] += val; };
-    assemble_rhs(space_init, quad_init, rhs_init_psi_x, [&ml_problem, eps](auto v, auto x) { return  (ml_problem.H3({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dy - ml_problem.H2({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dz) * v.val; });
+    assemble_rhs(space_init, quad_init, rhs_init_psi_x, [&ml_problem, mu_inv](auto v, auto x) { return  mu_inv * (ml_problem.H3({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dy - ml_problem.H2({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dz) * v.val; });
 
     fmt::print("*\tPsi(x,t=0).y\n");
     auto Fpsi_init_y = std::vector<double>(n_init);
     auto rhs_init_psi_y = [&Fpsi_init_y](int J, double val) { Fpsi_init_y[J] += val; };
-    assemble_rhs(space_init, quad_init, rhs_init_psi_y, [&ml_problem, eps](auto v, auto x) { return  (ml_problem.H1({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dz - ml_problem.H3({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dx) * v.val; });
+    assemble_rhs(space_init, quad_init, rhs_init_psi_y, [&ml_problem, mu_inv](auto v, auto x) { return  mu_inv * (ml_problem.H1({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dz - ml_problem.H3({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dx) * v.val; });
 
     fmt::print("*\tPsi(x,t=0).z\n");
     auto Fpsi_init_z = std::vector<double>(n_init);
     auto rhs_init_psi_z = [&Fpsi_init_z](int J, double val) { Fpsi_init_z[J] += val; };
-    assemble_rhs(space_init, quad_init, rhs_init_psi_z, [&ml_problem, eps](auto v, auto x) { return  (ml_problem.H2({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dx - ml_problem.H1({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dy) * v.val; });
+    assemble_rhs(space_init, quad_init, rhs_init_psi_z, [&ml_problem, mu_inv](auto v, auto x) { return  mu_inv * (ml_problem.H2({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dx - ml_problem.H1({std::get<0>(x),std::get<1>(x),std::get<2>(x)},0).dy) * v.val; });
 
 
 
@@ -854,6 +915,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                     auto const J = Ez.global_index(j);
                     mat(I, J) = 0;
                 }
+                // mat(I, I) = 1;
                 
                 // RHS
                 auto const [ix, iy, iz, it] = i;
@@ -889,6 +951,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                     mat(I, J) = 0;
                 }
                 // RHS
+                // mat(I, I) = 1;
                 
                 auto const [ix, iy, iz, it] = i;
                 if (it == Ey.space_w().dof_count() - 1) { // initial state
@@ -922,7 +985,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
                     auto const J = Ex.global_index(j);
                     mat(I, J) = 0;
                 }
-                
+                // mat(I, I) = 1;
                 // RHS
                 auto const [ix, iy, iz, it] = i;
                 if (it == Ez.space_w().dof_count() - 1) { // initial state
@@ -941,13 +1004,14 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     
     }
 
+    // RHS update
     for (auto const i : Ex.dofs()) {
         auto const I = Ex.global_index(i);
         auto const [ix, iy, iz, it] = i;
         if (it == 0) {
             auto const i_init = ads::index_types3::index{ix, iy, iz};
             auto const I_init = space_init.global_index(i_init);
-            F[I] += Fpsi_init_x[I_init];
+            F[I] -= Fpsi_init_x[I_init];
         }
     }
 
@@ -957,7 +1021,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
         if (it == 0) {
             auto const i_init = ads::index_types3::index{ix, iy, iz};
             auto const I_init = space_init.global_index(i_init);
-            F[I] += Fpsi_init_y[I_init];
+            F[I] -= Fpsi_init_y[I_init];
         }
     }
 
@@ -967,38 +1031,38 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
         if (it == 0) {
             auto const i_init = ads::index_types3::index{ix, iy, iz};
             auto const I_init = space_init.global_index(i_init);
-            F[I] += Fpsi_init_z[I_init];
+            F[I] -= Fpsi_init_z[I_init];
         }
     }
 
 
     mat.mumpsify(problem);
 
-    fmt::print("Equation system preparation\n");
-    // problem.prepare_data();
-
     fmt::print("Non-zeros: {}\n", problem.nonzero_entries());
 
     fmt::print("Solving\n");
     solver.solve(problem);
 
-    auto const i_test4 = ads::index_types4::index{4,4,4,0};
-    auto const I_test4 = Ez.global_index(i_test4);
-    auto const i_test3 = ads::index_types3::index{4,4,4};
-    auto const I_test3 = space_init.global_index(i_test3);
-    fmt::print("TEST Ez0: {}  Ez_init: {}\n", F[I_test4], Fz_init[I_test3]);
-
 
     auto ex = ads::bspline_function4(&Ex, F.data());
     auto ey = ads::bspline_function4(&Ey, F.data());
     auto ez = ads::bspline_function4(&Ez, F.data());
+    
+
     fmt::print("Saving\n");
     save_maxwell_to_file4D("dup-full.vti", T, ex, ey, ez);
 
     auto ex_init = ads::bspline_function3(&space_init, Fx_init.data());
     auto ey_init = ads::bspline_function3(&space_init, Fy_init.data());
     auto ez_init = ads::bspline_function3(&space_init, Fz_init.data());
+
+
     fmt::print("Saving Init\n");
     save_init_maxwell_to_file("dup-full.vti", T, ex_init, ey_init, ez_init);
+
+
+    fmt::print("Computing error\n");
+    compute_norms_E(mesh_init, quad_init, ml_problem, ex, ey, ez, T);
+
     fmt::print("Done\n");
 }
