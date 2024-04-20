@@ -2887,8 +2887,8 @@ private:
                 const auto val_x = [&, ix = ix, q1 = q1](int der) {
                     return vals_interval1_(q1, ix, der);
                 };
-                const auto val_y = [&, iy = iy, q1 = q1](int der) {
-                    return vals_interval1_(q1, iy, der);
+                const auto val_y = [&, iy = iy, q2 = q2](int der) {
+                    return vals_interval1_(q2, iy, der);
                 };
                 const auto val_w = [&, iw = iw, q3 = q3](int der) {
                     return vals_interval2_(q3, iw, der);
@@ -2910,8 +2910,8 @@ private:
                 const auto val_y = [&, iy = iy, q2 = q2](int der) {
                     return vals_interval2_(q2, iy, der);
                 };
-                const auto val_z = [&, iz = iz, q2 = q2](int der) {
-                    return vals_interval2_(q2, iz, der);
+                const auto val_z = [&, iz = iz, q3 = q3](int der) {
+                    return vals_interval2_(q3, iz, der);
                 };
                 const auto avg_w = [&, iw = iw](int der) { return vals_point_.average(iw, der); };
                 const auto jump_w = [&, iw = iw, nw = nw](int der) {

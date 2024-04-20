@@ -198,6 +198,40 @@ auto save_maxwell_to_file4D(std::string const& path, double time, FEx const& fex
 }
 
 
+template <typename Problem>
+auto save_maxwell_ref_to_file4D(std::string const& path, double time, Problem const& problem) -> void {
+    constexpr auto res_time = 100;
+
+    auto fex_at_fixed_t = [&](double t) {
+      return [&, t](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return problem.E1({x, y, z}, t).val;
+      };
+    };
+
+    auto fey_at_fixed_t = [&](double t) {
+      return [&, t](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return problem.E2({x, y, z}, t).val;
+      };
+    };
+
+    auto fez_at_fixed_t = [&](double t) {
+      return [&, t](ads::point3_t p) {
+        auto const [x, y, z] = p;
+        return problem.E3({x, y, z}, t).val;
+      };
+    };
+
+
+    int i = 0;
+    for (auto t : ads::evenly_spaced(0.0, time, res_time)) {
+        save_maxwell_to_file(fmt::format("output_ref_{}.vti", i), time, fex_at_fixed_t(t), fey_at_fixed_t(t), fez_at_fixed_t(t)); 
+        ++i;
+    }
+}
+
+
 template <typename FEx, typename FEy, typename FEz>
 auto save_init_maxwell_to_file(std::string const& path, double time, FEx const& fex, FEy const& fey, FEz const& fez) -> void {
     constexpr auto res_time = 50;
@@ -711,7 +745,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     auto const x_elems = 6;
     auto const y_elems = 6;
     auto const z_elems = 6;
-    auto const t_elems = 10;
+    auto const t_elems = 14;
     
     auto const p = 1;
     auto const c = 0;
@@ -821,25 +855,25 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
 
 
     // Ex
-    assemble(Ex, Ex, quad, M,    [eps](auto sx, auto tx, auto /*x*/) {return  -(eps    * sx.dw * tx.dw); });
-    assemble(Ex, Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dy * tx.dy); });
-    assemble(Ex, Ex, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return   (mu_inv * sx.dz * tx.dz); });
-    assemble(Ey, Ex, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return  -(mu_inv * sy.dx * ty.dy); });
-    assemble(Ez, Ex, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dx * tz.dz); });
+    assemble(Ex, Ex, quad, M,    [eps](auto ex, auto vx, auto /*x*/) {return  -(eps    * ex.dw * vx.dw); });
+    assemble(Ex, Ex, quad, M, [mu_inv](auto ex, auto vx, auto /*x*/) {return   (mu_inv * ex.dy * vx.dy); });
+    assemble(Ex, Ex, quad, M, [mu_inv](auto ex, auto vx, auto /*x*/) {return   (mu_inv * ex.dz * vx.dz); });
+    assemble(Ey, Ex, quad, M, [mu_inv](auto ey, auto vx, auto /*x*/) {return  -(mu_inv * ey.dx * vx.dy); });
+    assemble(Ez, Ex, quad, M, [mu_inv](auto ez, auto vx, auto /*x*/) {return  -(mu_inv * ez.dx * vx.dz); });
 
     // Ey
-    assemble(Ex, Ey, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return  -(mu_inv * sx.dy * tx.dx); });
-    assemble(Ey, Ey, quad, M,    [eps](auto sy, auto ty, auto /*x*/) {return  -(eps    * sy.dw * ty.dw); });
-    assemble(Ey, Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dy * ty.dy); });
-    assemble(Ey, Ey, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return   (mu_inv * sy.dz * ty.dz); });
-    assemble(Ez, Ey, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return  -(mu_inv * sz.dy * tz.dz); });
+    assemble(Ex, Ey, quad, M, [mu_inv](auto ex, auto vy, auto /*x*/) {return  -(mu_inv * ex.dy * vy.dx); });
+    assemble(Ey, Ey, quad, M,    [eps](auto ey, auto vy, auto /*x*/) {return  -(eps    * ey.dw * vy.dw); });
+    assemble(Ey, Ey, quad, M, [mu_inv](auto ey, auto vy, auto /*x*/) {return   (mu_inv * ey.dx * vy.dx); });
+    assemble(Ey, Ey, quad, M, [mu_inv](auto ey, auto vy, auto /*x*/) {return   (mu_inv * ey.dz * vy.dz); });
+    assemble(Ez, Ey, quad, M, [mu_inv](auto ez, auto vy, auto /*x*/) {return  -(mu_inv * ez.dy * vy.dz); });
 
     // Ez
-    assemble(Ex, Ez, quad, M, [mu_inv](auto sx, auto tx, auto /*x*/) {return  -(mu_inv * sx.dz * tx.dx); });
-    assemble(Ey, Ez, quad, M, [mu_inv](auto sy, auto ty, auto /*x*/) {return  -(mu_inv * sy.dz * ty.dy); });
-    assemble(Ez, Ez, quad, M,    [eps](auto sz, auto tz, auto /*x*/) {return  -(eps    * sz.dw * tz.dw); });
-    assemble(Ez, Ez, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dx * tz.dx); });
-    assemble(Ez, Ez, quad, M, [mu_inv](auto sz, auto tz, auto /*x*/) {return   (mu_inv * sz.dy * tz.dy); });
+    assemble(Ex, Ez, quad, M, [mu_inv](auto ex, auto vz, auto /*x*/) {return  -(mu_inv * ex.dz * vz.dx); });
+    assemble(Ey, Ez, quad, M, [mu_inv](auto ey, auto vz, auto /*x*/) {return  -(mu_inv * ey.dz * vz.dy); });
+    assemble(Ez, Ez, quad, M,    [eps](auto ez, auto vz, auto /*x*/) {return  -(eps    * ez.dw * vz.dw); });
+    assemble(Ez, Ez, quad, M, [mu_inv](auto ez, auto vz, auto /*x*/) {return   (mu_inv * ez.dx * vz.dx); });
+    assemble(Ez, Ez, quad, M, [mu_inv](auto ez, auto vz, auto /*x*/) {return   (mu_inv * ez.dy * vz.dy); });
 
 
     fmt::print("Assembling RHS\n");
@@ -1063,6 +1097,9 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
 
     fmt::print("Computing error\n");
     compute_norms_E(mesh_init, quad_init, ml_problem, ex, ey, ez, T);
+
+    fmt::print("Save ref\n");
+    save_maxwell_ref_to_file4D("dup-full.vti", 2.0, ml_problem);
 
     fmt::print("Done\n");
 }
