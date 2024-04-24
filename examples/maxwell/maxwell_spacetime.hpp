@@ -742,16 +742,16 @@ auto maxwell_spacetime_main_eigen(int /*argc*/, char* /*argv*/[]) -> void {
 
 auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
 
-    auto const x_elems = 6;
-    auto const y_elems = 6;
-    auto const z_elems = 6;
-    auto const t_elems = 14;
+    auto const x_elems = 8;
+    auto const y_elems = 8;
+    auto const z_elems = 8;
+    auto const t_elems = 8;
     
     auto const p = 1;
     auto const c = 0;
 
-    auto const eps = 8.854e-12;
-    auto const mu  = 12.556e-7;
+    auto const eps = 1; //8.854e-12;
+    auto const mu  = 1; //12.556e-7;
     auto const c0  = 1 / std::sqrt(eps * mu);
     auto const T = 1.0;//z_elems / c0;
     auto const mu_inv = 1/mu;
@@ -1099,7 +1099,7 @@ auto maxwell_spacetime_main_mumps(int /*argc*/, char* /*argv*/[]) -> void {
     compute_norms_E(mesh_init, quad_init, ml_problem, ex, ey, ez, T);
 
     fmt::print("Save ref\n");
-    save_maxwell_ref_to_file4D("dup-full.vti", 2.0, ml_problem);
+    save_maxwell_ref_to_file4D("dup-full.vti", 1.0, ml_problem);
 
     fmt::print("Done\n");
 }
