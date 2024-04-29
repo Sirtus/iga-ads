@@ -6,7 +6,7 @@
 
 #include <lyra/lyra.hpp>
 
-#include "maxwell_spacetime.hpp"
+#include "maxwell_spacetime_uniform.hpp"
 
 auto parse_args(int argc, char* argv[]) {
     struct {
@@ -43,6 +43,5 @@ int main(int argc, char* argv[]) {
 
     // auto sim = maxwell_uniform{cfg};
     // sim.run();
-    // maxwell_spacetime_main_eigen(argc, argv);
-    maxwell_spacetime_main_mumps(argc, argv);
+    maxwell_spacetime_uniform_main_eigen(argc, argv);
 }

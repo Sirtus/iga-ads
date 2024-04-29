@@ -8,8 +8,8 @@
 
 #ifdef ADS_USE_EIGEN
 
-#    include <Eigen/Dense>
 #    include <Eigen/Sparse>
+#    include <unsupported/Eigen/IterativeSolvers>
 
 #    include <cstdint>
 #    include <cstdio>
@@ -73,7 +73,11 @@ private:
 
 class solver {
 private:
-    Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver_;
+    // Eigen::GMRES<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
+    Eigen::DGMRES<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
+    // Eigen::IDRS<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
+    // Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
+    // Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower, Eigen::DiagonalPreconditioner<double>> solver_;
     int max_iter_ = 0;
     Eigen::VectorXd result;
 public:
@@ -84,7 +88,9 @@ public:
     solver(solver&&) = delete;
     solver& operator=(solver&&) = delete;
 
-    void set_max_iter(int max_iter) { max_iter_ = max_iter; }
+    void set_max_iter(int max_iter) { solver_.setMaxIterations(max_iter); }
+
+    void set_tolerance(double tolerance) { solver_.setTolerance(tolerance); }
 
     void save_to_file(problem& problem, const char* output_path) {
         std::string a_path = output_path;
@@ -172,6 +178,17 @@ public:
         return result.data();
     }
 
+    double* solveWithGuess(problem& problem, double* guess_data) {
+        prepare_(problem);
+        Eigen::VectorXd guess;
+        guess.resize(problem.dofs()+1);
+        for (int i = 0; i < problem.dofs(); ++i) guess(i) = guess_data[i]; 
+        solve_(problem, guess);
+        std::cout << "#Solver: iterations:     " << solver_.iterations() << std::endl;
+        std::cout << "#Solver: estimated error: " << solver_.error()      << std::endl;
+        return result.data();
+    }
+
     ~solver() { }
 
 private:
@@ -181,6 +198,8 @@ private:
     }
 
     void solve_(problem& problem) { result = solver_.compute(problem.a()).solve(problem.rhs()); }
+
+    void solve_(problem& problem, Eigen::VectorXd& guess) { result = solver_.compute(problem.a()).solveWithGuess(problem.rhs(), guess); }
 
 };
 

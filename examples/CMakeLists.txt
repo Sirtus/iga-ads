@@ -216,9 +216,9 @@ add_example(maxwell_ads GALOIS
     ads-example-maxwell-common
 )
 
-add_example(maxwell_spacetime GALOIS MUMPS EIGEN
+add_example(maxwell_spacetime_uniform GALOIS MUMPS EIGEN
   SRC
-    maxwell/main_spacetime.cpp
+    maxwell/main_spacetime_uniform.cpp
   LIBS
     ads-example-maxwell-common
     bfg::lyra
