@@ -224,6 +224,14 @@ add_example(maxwell_spacetime_uniform GALOIS MUMPS EIGEN
     bfg::lyra
 )
 
+add_example(maxwell_spacetime_antenna GALOIS MUMPS EIGEN
+  SRC
+    maxwell/main_spacetime_antenna.cpp
+  LIBS
+    ads-example-maxwell-common
+    bfg::lyra
+)
+
 add_example(tumor GALOIS
   SRC
   tumor/vasculature/plot.cpp
