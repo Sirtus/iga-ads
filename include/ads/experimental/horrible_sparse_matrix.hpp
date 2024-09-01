@@ -53,7 +53,7 @@ public:
     auto eigenify(ads::eigen::problem& problem) const -> void {
         for (auto const& [idx, val] : storage_) {
             if (val != 0) {
-                problem.add(idx.i + 1, idx.j + 1, val);
+                problem.add(idx.i, idx.j, val);
             }
         }
     }
