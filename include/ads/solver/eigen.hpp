@@ -73,10 +73,10 @@ private:
 
 class solver {
 private:
-    // Eigen::GMRES<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
+     Eigen::GMRES<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
     // Eigen::DGMRES<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
     // Eigen::IDRS<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
-    Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
+    //Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double>> solver_;
     // Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower, Eigen::DiagonalPreconditioner<double>> solver_;
     int max_iter_ = 0;
     Eigen::VectorXd result;
@@ -182,7 +182,7 @@ public:
         prepare_(problem);
         Eigen::VectorXd guess;
         guess.resize(problem.dofs()+1);
-        for (int i = 0; i < problem.dofs(); ++i) guess(i) = guess_data[i]; 
+        for (int i = 0; i < problem.dofs(); ++i) guess(i) = guess_data[i];
         solve_(problem, guess);
         std::cout << "#Solver: iterations:     " << solver_.iterations() << std::endl;
         std::cout << "#Solver: estimated error: " << solver_.error()      << std::endl;

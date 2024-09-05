@@ -26,6 +26,8 @@ public:
     static constexpr double tau = 2 * T0;
     static constexpr double t0 = 4 * tau;
 
+    static constexpr double l = 0.1/5;
+
     using vec3 = ads::math::vec<3>;
 
     static constexpr ads::point3_t center{1, 1, 1};
@@ -88,6 +90,18 @@ public:
     auto E1(point_type x, double t) const -> value_type { return {E(x, t).x, 0, 0, 0}; }
     auto E2(point_type x, double t) const -> value_type { return {E(x, t).y, 0, 0, 0}; }
     auto E3(point_type x, double t) const -> value_type { return {E(x, t).z, 0, 0, 0}; }
+
+    auto J1(point_type /*x*/, double t) const -> value_type { return {0, 0, 0, 0}; }
+    auto J2(point_type /*x*/, double t) const -> value_type { return {0, 0, 0, 0}; }
+    auto J3(point_type x, double t) const -> value_type {
+        if (x[2] > 1.0 - l && x[2] < 1.0 + l) {
+            // std::cout << x[2] << "\n";
+            return {g_val(t), 0, 0, 0} ;
+        } else {
+            // std::cout << x[2] << " " << 1.0 - l << " " << 1.0 + l << "\n";
+            return {0, 0, 0, 0};
+        }
+    }
 
     // auto dE1(point_type x, double t) const -> double { return dE(x, t).x; }
     // auto dE2(point_type x, double t) const -> double { return dE(x, t).y; }

@@ -50,12 +50,24 @@ public:
         }
     }
 
-    auto eigenify(ads::eigen::problem& problem) const -> void {
-        for (auto const& [idx, val] : storage_) {
+    auto eigenify(ads::eigen::problem& problem) -> void {
+        // for (auto const& [idx, val] : storage_) {
+        //     if (val != 0) {
+        //         problem.add(idx.i, idx.j, val);
+        //     }
+        // }
+        for (auto it = storage_.begin(); it != storage_.end();) {
+            auto & idx = it->first;
+            auto & val = it->second;
             if (val != 0) {
                 problem.add(idx.i, idx.j, val);
             }
+            it = storage_.erase(it);
+            // storage_.rehash(0);
+            // std::cout << idx.i <<", " << idx.j << "  - " << val << "\n";
         }
+        storage_.clear();
+
     }
 
     auto begin() const { return std::cbegin(storage_); }
